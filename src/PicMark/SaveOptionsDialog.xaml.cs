@@ -154,9 +154,11 @@ namespace PicMark
 
         private long? GetTargetBytes()
         {
+            if (CompressRadio == null || TargetSizeBox == null || TargetUnitCombo == null) return null;
             if (CompressRadio.IsChecked != true) return null;
             if (!double.TryParse(TargetSizeBox.Text, out double value) || value <= 0) return null;
-            bool mb = ((ComboBoxItem)TargetUnitCombo.SelectedItem).Content.ToString() == "MB";
+            var unit = TargetUnitCombo.SelectedItem as ComboBoxItem;
+            bool mb = unit?.Content?.ToString() == "MB";
             return (long)(value * (mb ? 1024 * 1024 : 1024));
         }
 
@@ -168,9 +170,10 @@ namespace PicMark
             string qualityText = ext == ".jpg" ? $"，质量 {GetSelectedQuality()}%" : string.Empty;
             string targetText = GetTargetBytes() is long bytes ? $"，目标约 {bytes / 1024.0:0.#} KB" : string.Empty;
             PreviewInfoText.Text = $"{sizeText}{qualityText}{targetText}";
-            EstimateText.Text = ext == ".jpg"
-                ? "JPG 会优先通过质量压缩控制体积；PNG/BMP 更适合无损保存，若设置目标体积会优先缩小尺寸。"
-                : "PNG/BMP 以画质为先；需要明显压缩体积时建议切换为 JPG。";
+            if (EstimateText != null)
+                EstimateText.Text = ext == ".jpg"
+                    ? "JPG 会优先通过质量压缩控制体积；PNG/BMP 更适合无损保存，若设置目标体积会优先缩小尺寸。"
+                    : "PNG/BMP 以画质为先；需要明显压缩体积时建议切换为 JPG。";
         }
     }
 }
