@@ -151,6 +151,33 @@
             <Setter Property="BorderThickness" Value="1"/>
         </Style>
 
+        <Style x:Key="SaveMenuButton" TargetType="Button">
+            <Setter Property="Height" Value="38"/>
+            <Setter Property="Padding" Value="14,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4">
+                            <ContentPresenter VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#FF454545"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="#FF747474"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <Style x:Key="DividerStyle" TargetType="Border">
             <Setter Property="Width" Value="1"/>
             <Setter Property="Margin" Value="8,9"/>
@@ -182,19 +209,36 @@
                             <TextBlock Text="保存"/>
                             <TextBlock Text="⌄" Margin="7,0,0,0"/>
                         </StackPanel>
-                        <Button.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="另存为" Click="MenuSaveAs_Click"/>
-                                <MenuItem Header="覆盖原图" Click="MenuOverwrite_Click"/>
-                                <Separator/>
-                                <MenuItem Header="复制到剪贴板" Click="MenuCopy_Click"/>
-                                <Separator/>
-                                <MenuItem Header="图片转文档" IsEnabled="False"/>
-                                <MenuItem Header="图片转表格" IsEnabled="False"/>
-                                <MenuItem Header="图片转PDF" IsEnabled="False"/>
-                            </ContextMenu>
-                        </Button.ContextMenu>
                     </Button>
+                    <Popup x:Name="SavePopup" PlacementTarget="{Binding ElementName=BtnSave}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                        <Border Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="8" Width="250">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.35"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuSaveAs_Click">
+                                    <TextBlock Text="▣  另存为"/>
+                                </Button>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuOverwrite_Click">
+                                    <TextBlock Text="▣  覆盖原图"/>
+                                </Button>
+                                <Border Height="1" Background="#FF4A4A4A" Margin="8,6"/>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuCopy_Click">
+                                    <TextBlock Text="⧉  复制到剪贴板"/>
+                                </Button>
+                                <Border Height="1" Background="#FF4A4A4A" Margin="8,6"/>
+                                <Button Style="{StaticResource SaveMenuButton}" IsEnabled="False">
+                                    <TextBlock Text="图片转文档"/>
+                                </Button>
+                                <Button Style="{StaticResource SaveMenuButton}" IsEnabled="False">
+                                    <TextBlock Text="图片转表格"/>
+                                </Button>
+                                <Button Style="{StaticResource SaveMenuButton}" IsEnabled="False">
+                                    <TextBlock Text="图片转PDF"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
                 </StackPanel>
                 <TextBlock x:Name="TopFileNameText" Text="未打开图片" FontSize="13" Foreground="{StaticResource TextPrimaryBrush}"
                            VerticalAlignment="Center" HorizontalAlignment="Center"/>

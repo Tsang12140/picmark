@@ -27,10 +27,9 @@ namespace PicMark
         public MainWindow()
         {
             InitializeComponent();
-            Canvas1.TextToolClicked += Canvas1_TextToolClicked;
-            Canvas1.TextAnnotationDoubleClicked += Canvas1_TextAnnotationDoubleClicked;
             Canvas1.AnnotationsChanged += (s, e) => MarkDirty();
             Canvas1.SelectionChanged += Canvas1_SelectionChanged;
+            Canvas1.TextEditFinished += (s, e) => SetActiveTool("Select");
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             Closing += MainWindow_Closing;
             Scroller.PreviewMouseWheel += Scroller_PreviewMouseWheel;
@@ -276,6 +275,8 @@ namespace PicMark
         {
             var tag = (string)((Button)sender).Tag;
             SetActiveTool(tag);
+            if (tag == "Text")
+                UpdateStatus("点击图片上的位置，然后直接输入文字；按 Enter 完成。");
         }
 
         private void SetActiveTool(string tag)
@@ -352,30 +353,6 @@ namespace PicMark
         private void BtnZoomOut_Click(object sender, RoutedEventArgs e) => Canvas1.Scale /= 1.25;
         private void BtnZoomReset_Click(object sender, RoutedEventArgs e) => Canvas1.Scale = 1.0;
 
-        private void Canvas1_TextToolClicked(Point imagePoint)
-        {
-            var dlg = new TextInputDialog { Owner = this, InitialFontSize = Canvas1.CurrentFontSize };
-            if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.ResultText))
-            {
-                Canvas1.CurrentFontSize = dlg.ResultFontSize;
-                Canvas1.AddTextAnnotation(imagePoint, dlg.ResultText);
-                SetActiveFontButton(((int)dlg.ResultFontSize).ToString());
-                SetActiveTool("Select");
-                UpdateStatus("文字已添加。现在可以直接拖动，双击可继续编辑。");
-            }
-        }
-
-        private void Canvas1_TextAnnotationDoubleClicked(TextAnnotation text)
-        {
-            var dlg = new TextInputDialog { Owner = this, InitialFontSize = text.FontSize, EditingExistingText = text.Text };
-            if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.ResultText))
-            {
-                Canvas1.CurrentFontSize = dlg.ResultFontSize;
-                Canvas1.EditSelectedText(dlg.ResultText, dlg.ResultFontSize);
-                SetActiveFontButton(((int)dlg.ResultFontSize).ToString());
-            }
-        }
-
         private void Canvas1_SelectionChanged(object sender, EventArgs e)
         {
             if (Canvas1.Selected is TextAnnotation text)
@@ -394,16 +371,24 @@ namespace PicMark
 
         private void BtnSaveMenu_Click(object sender, RoutedEventArgs e)
         {
-            BtnSave.ContextMenu.PlacementTarget = BtnSave;
-            BtnSave.ContextMenu.IsOpen = true;
+            SavePopup.IsOpen = true;
         }
 
-        private void MenuSaveAs_Click(object sender, RoutedEventArgs e) => SaveAnnotatedImage(false);
+        private void MenuSaveAs_Click(object sender, RoutedEventArgs e)
+        {
+            SavePopup.IsOpen = false;
+            SaveAnnotatedImage(false);
+        }
 
-        private void MenuOverwrite_Click(object sender, RoutedEventArgs e) => BtnOverwrite_Click(sender, e);
+        private void MenuOverwrite_Click(object sender, RoutedEventArgs e)
+        {
+            SavePopup.IsOpen = false;
+            BtnOverwrite_Click(sender, e);
+        }
 
         private void MenuCopy_Click(object sender, RoutedEventArgs e)
         {
+            SavePopup.IsOpen = false;
             if (Canvas1.Image == null)
             {
                 MessageBox.Show(this, "请先打开一张图片。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);

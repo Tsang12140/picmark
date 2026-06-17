@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -16,6 +17,10 @@ namespace PicMark
         private Point _dragStartImagePoint;
         private bool _isMovingSelection;
         private bool _selectionMoved;
+        private TextAnnotation _editingText;
+        private bool _editingTextWasNew;
+        private string _editingOriginalText;
+        private double _editingOriginalFontSize;
         private readonly UndoManager _undo = new UndoManager();
 
         public List<Annotation> Annotations { get; } = new List<Annotation>();
@@ -25,9 +30,8 @@ namespace PicMark
         public double CurrentFontSize { get; set; } = 36;
 
         public event EventHandler AnnotationsChanged;
-        public event Action<Point> TextToolClicked;
-        public event Action<TextAnnotation> TextAnnotationDoubleClicked;
         public event EventHandler SelectionChanged;
+        public event EventHandler TextEditFinished;
 
         public Annotation Selected => _selected;
         public bool IsTextSelected => _selected is TextAnnotation;
@@ -81,7 +85,12 @@ namespace PicMark
             dc.PushTransform(new ScaleTransform(Scale, Scale));
             dc.DrawImage(Image, new Rect(0, 0, Image.PixelWidth, Image.PixelHeight));
             foreach (var a in Annotations)
-                a.Draw(dc, a == _selected, Image);
+            {
+                if (ReferenceEquals(a, _editingText))
+                    DrawEditingText(dc);
+                else
+                    a.Draw(dc, a == _selected, Image);
+            }
             _drawing?.Draw(dc, false, Image);
             dc.Pop();
         }
@@ -122,15 +131,14 @@ namespace PicMark
                     CaptureMouse();
                     break;
                 case AnnotationTool.Text:
-                    TextToolClicked?.Invoke(p);
+                    BeginTextAnnotation(p);
                     break;
                 case AnnotationTool.Select:
                 default:
                     var hit = HitTest(p);
                     if (e.ClickCount == 2 && hit is TextAnnotation textHit)
                     {
-                        SetSelected(textHit);
-                        TextAnnotationDoubleClicked?.Invoke(textHit);
+                        BeginEditTextAnnotation(textHit);
                         break;
                     }
                     SetSelected(hit);
@@ -222,6 +230,29 @@ namespace PicMark
 
         protected override void OnKeyDown(KeyEventArgs e)
         {
+            if (_editingText != null)
+            {
+                if (e.Key == Key.Enter)
+                {
+                    CommitTextEdit();
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Escape)
+                {
+                    CancelTextEdit();
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Back)
+                {
+                    if (_editingText.Text.Length > 0)
+                        _editingText.Text = _editingText.Text.Substring(0, _editingText.Text.Length - 1);
+                    InvalidateVisual();
+                    AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+                    e.Handled = true;
+                }
+                return;
+            }
+
             if (e.Key == Key.Delete)
             {
                 DeleteSelected();
@@ -231,6 +262,23 @@ namespace PicMark
                 SetSelected(null);
                 InvalidateVisual();
             }
+        }
+
+        protected override void OnTextInput(TextCompositionEventArgs e)
+        {
+            if (_editingText == null)
+            {
+                base.OnTextInput(e);
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(e.Text))
+            {
+                _editingText.Text += e.Text;
+                InvalidateVisual();
+                AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+            }
+            e.Handled = true;
         }
 
         public void DeleteSelected()
@@ -325,6 +373,91 @@ namespace PicMark
             return annotation;
         }
 
+        public void BeginTextAnnotation(Point imagePoint)
+        {
+            PushUndo();
+            var annotation = new TextAnnotation
+            {
+                Location = imagePoint,
+                Text = string.Empty,
+                StrokeColor = CurrentColor,
+                FontSize = CurrentFontSize
+            };
+            Annotations.Add(annotation);
+            _editingText = annotation;
+            _editingTextWasNew = true;
+            _editingOriginalText = string.Empty;
+            _editingOriginalFontSize = annotation.FontSize;
+            SetSelected(annotation);
+            Focus();
+            InvalidateVisual();
+        }
+
+        private void BeginEditTextAnnotation(TextAnnotation annotation)
+        {
+            PushUndo();
+            _editingText = annotation;
+            _editingTextWasNew = false;
+            _editingOriginalText = annotation.Text;
+            _editingOriginalFontSize = annotation.FontSize;
+            SetSelected(annotation);
+            Focus();
+            InvalidateVisual();
+        }
+
+        private void CommitTextEdit()
+        {
+            if (_editingText == null) return;
+            if (string.IsNullOrWhiteSpace(_editingText.Text))
+                Annotations.Remove(_editingText);
+            _editingText = null;
+            _editingTextWasNew = false;
+            _editingOriginalText = null;
+            InvalidateVisual();
+            AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+            TextEditFinished?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void CancelTextEdit()
+        {
+            if (_editingText == null) return;
+            if (_editingTextWasNew || string.IsNullOrWhiteSpace(_editingText.Text))
+                Annotations.Remove(_editingText);
+            else
+            {
+                _editingText.Text = _editingOriginalText ?? string.Empty;
+                _editingText.FontSize = _editingOriginalFontSize;
+            }
+            _editingText = null;
+            _editingTextWasNew = false;
+            _editingOriginalText = null;
+            InvalidateVisual();
+            AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+            TextEditFinished?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void DrawEditingText(DrawingContext dc)
+        {
+            if (_editingText == null) return;
+            string displayText = string.IsNullOrEmpty(_editingText.Text) ? "输入文字" : _editingText.Text + "│";
+            var brush = string.IsNullOrEmpty(_editingText.Text)
+                ? new SolidColorBrush(Color.FromArgb(150, 255, 255, 255))
+                : new SolidColorBrush(_editingText.StrokeColor);
+            var ft = new FormattedText(
+                displayText,
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                new Typeface(new FontFamily("Microsoft YaHei"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                _editingText.FontSize,
+                brush,
+                1.0);
+
+            var bounds = new Rect(_editingText.Location, new Size(Math.Max(ft.Width, 60), Math.Max(ft.Height, _editingText.FontSize + 8)));
+            bounds.Inflate(10, 6);
+            dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(80, 20, 20, 20)), new Pen(new SolidColorBrush(Color.FromRgb(91, 108, 255)), 2), bounds, 4, 4);
+            dc.DrawText(ft, _editingText.Location);
+        }
+
         public void ClearAll()
         {
             Annotations.Clear();
@@ -332,6 +465,9 @@ namespace PicMark
             _drawing = null;
             _isMovingSelection = false;
             _selectionMoved = false;
+            _editingText = null;
+            _editingTextWasNew = false;
+            _editingOriginalText = null;
             _undo.Clear();
             InvalidateVisual();
         }
