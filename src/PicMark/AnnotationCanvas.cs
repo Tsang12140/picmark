@@ -47,6 +47,7 @@ namespace PicMark
             set
             {
                 _image = value;
+                UpdateDisplaySize();
                 InvalidateMeasure();
                 InvalidateVisual();
             }
@@ -60,6 +61,7 @@ namespace PicMark
                 double next = Math.Max(0.05, Math.Min(value, 8.0));
                 if (Math.Abs(_scale - next) < 0.0001) return;
                 _scale = next;
+                UpdateDisplaySize();
                 InvalidateMeasure();
                 InvalidateVisual();
                 ScaleChanged?.Invoke(this, EventArgs.Empty);
@@ -74,6 +76,19 @@ namespace PicMark
             Focusable = true;
             ClipToBounds = true;
             Background = Brushes.Transparent;
+        }
+
+        private void UpdateDisplaySize()
+        {
+            if (Image == null)
+            {
+                Width = double.NaN;
+                Height = double.NaN;
+                return;
+            }
+
+            Width = Image.PixelWidth * Scale;
+            Height = Image.PixelHeight * Scale;
         }
 
         protected override Size MeasureOverride(Size availableSize)

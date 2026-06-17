@@ -320,7 +320,8 @@
 
                 <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF242424">
                     <Border Padding="64,46,64,86">
-                        <Border x:Name="CanvasFrame" Background="White" Visibility="Collapsed">
+                        <Border x:Name="CanvasFrame" Background="White" Visibility="Collapsed"
+                                HorizontalAlignment="Left" VerticalAlignment="Top">
                             <Border.Effect>
                                 <DropShadowEffect Color="#FF000000" BlurRadius="28" ShadowDepth="8" Opacity="0.45"/>
                             </Border.Effect>
