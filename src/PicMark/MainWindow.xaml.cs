@@ -9,6 +9,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using Microsoft.Win32;
 
 namespace PicMark
@@ -17,6 +18,8 @@ namespace PicMark
     {
         private static readonly string[] SupportedExtensions = { ".jpg", ".jpeg", ".png", ".bmp", ".webp" };
         private static readonly string[] SaveableExtensions = { ".jpg", ".jpeg", ".png", ".bmp" };
+        private const double MinimumWindowWidth = 1180;
+        private const double MinimumWindowHeight = 720;
 
         private string _currentFilePath;
         private string _currentExtension = ".png";
@@ -93,8 +96,10 @@ namespace PicMark
 
         private void ApplyWindowSettings()
         {
-            Width = Math.Max(900, _settings.WindowWidth);
-            Height = Math.Max(620, _settings.WindowHeight);
+            MinWidth = MinimumWindowWidth;
+            MinHeight = MinimumWindowHeight;
+            Width = Math.Max(MinimumWindowWidth, _settings.WindowWidth);
+            Height = Math.Max(MinimumWindowHeight, _settings.WindowHeight);
             if (!double.IsNaN(_settings.WindowLeft) && !double.IsNaN(_settings.WindowTop))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual;
@@ -266,7 +271,7 @@ namespace PicMark
             _currentExtension = ext == ".webp" ? ".png" : ext;
             _hasUnsavedChanges = false;
             TopFileNameText.Text = Path.GetFileName(path);
-            AutoFitZoom();
+            FitImageAfterLayout();
             UpdateStatus($"已打开：{Path.GetFileName(path)}（{bmp.PixelWidth}×{bmp.PixelHeight}像素）");
         }
 
@@ -304,8 +309,13 @@ namespace PicMark
             _currentExtension = ".png";
             _hasUnsavedChanges = false;
             TopFileNameText.Text = "剪贴板图片.png";
-            AutoFitZoom();
+            FitImageAfterLayout();
             UpdateStatus("已粘贴剪贴板图片，保存时请选择保存位置");
+        }
+
+        private void FitImageAfterLayout()
+        {
+            Dispatcher.BeginInvoke((Action)AutoFitZoom, DispatcherPriority.Loaded);
         }
 
         private void AutoFitZoom()
@@ -314,7 +324,7 @@ namespace PicMark
             double viewW = Math.Max(Scroller.ActualWidth - 20, 200);
             double viewH = Math.Max(Scroller.ActualHeight - 20, 200);
             double fit = Math.Min(viewW / Canvas1.Image.PixelWidth, viewH / Canvas1.Image.PixelHeight);
-            Canvas1.Scale = Math.Min(fit, 1.0);
+            Canvas1.Scale = fit;
         }
 
         private void UpdateZoomControls()

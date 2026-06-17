@@ -2,7 +2,6 @@ using System;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Windows.Media.Imaging;
 
 namespace PicMark
@@ -25,18 +24,11 @@ namespace PicMark
                 : Path.GetFileNameWithoutExtension(sourcePath);
             string safeName = MakeSafeFileName(sourceName);
             string imagePath = Path.Combine(HistoryDirectory, $"{timestamp}_{safeName}.png");
-            string metaPath = Path.ChangeExtension(imagePath, ".txt");
 
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
             using (var fs = new FileStream(imagePath, FileMode.Create, FileAccess.Write))
                 encoder.Save(fs);
-
-            File.WriteAllText(metaPath,
-                $"Source={sourcePath ?? "Clipboard"}{Environment.NewLine}" +
-                $"Reason={reason}{Environment.NewLine}" +
-                $"CreatedAt={DateTime.Now:yyyy-MM-dd HH:mm:ss}{Environment.NewLine}",
-                Encoding.UTF8);
 
             TrimCache(maxCacheMb);
             return imagePath;
@@ -45,6 +37,7 @@ namespace PicMark
         public static long GetCacheBytes()
         {
             if (!Directory.Exists(HistoryDirectory)) return 0;
+            DeleteMetadataSidecars();
             return Directory.GetFiles(HistoryDirectory, "*", SearchOption.TopDirectoryOnly)
                 .Select(path => new FileInfo(path))
                 .Where(info => info.Exists)
@@ -54,6 +47,7 @@ namespace PicMark
         public static void TrimCache(int maxCacheMb)
         {
             if (!Directory.Exists(HistoryDirectory)) return;
+            DeleteMetadataSidecars();
             long maxBytes = Math.Max(20, maxCacheMb) * 1024L * 1024L;
             var files = Directory.GetFiles(HistoryDirectory, "*", SearchOption.TopDirectoryOnly)
                 .Select(path => new FileInfo(path))
@@ -75,6 +69,15 @@ namespace PicMark
                 {
                     total -= length;
                 }
+            }
+        }
+
+        private static void DeleteMetadataSidecars()
+        {
+            foreach (var path in Directory.GetFiles(HistoryDirectory, "*.txt", SearchOption.TopDirectoryOnly))
+            {
+                try { File.Delete(path); }
+                catch { }
             }
         }
 

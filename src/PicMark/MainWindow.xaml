@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:PicMark"
         Title="简标 PicMark - 图片标注" Height="840" Width="1280"
+        MinWidth="1180" MinHeight="720"
         Icon="App.ico"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True" Drop="Window_Drop"
