@@ -1,0 +1,31 @@
+# Build output
+bin/
+obj/
+Debug/
+Release/
+x86/
+x64/
+arm64/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# NuGet classic packages are restored from packages.config.
+src/packages/
+*.nupkg
+
+# Installer output
+installer/Output/
+installer/redist/*.exe
+installer/redist/*.msi
+
+# Logs and temporary files
+*.log
+*.tmp
+*.cache
+*.pdb
+

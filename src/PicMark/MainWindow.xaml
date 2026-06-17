@@ -1,0 +1,348 @@
+<Window x:Class="PicMark.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:PicMark"
+        Title="简标 PicMark" Height="800" Width="1240"
+        Icon="App.ico"
+        WindowStartupLocation="CenterScreen"
+        AllowDrop="True" Drop="Window_Drop"
+        FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei"
+        Background="#FFF1F2F4">
+    <Window.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF2F6FED"/>
+        <SolidColorBrush x:Key="AccentLightBrush" Color="#FFE8F0FE"/>
+        <SolidColorBrush x:Key="IconBrush" Color="#FF3C4043"/>
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FF1F2329"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FF6B7280"/>
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="ToolbarBrush" Color="#FFFFFFFF"/>
+        <SolidColorBrush x:Key="BorderBrush1" Color="#FFE4E6EB"/>
+        <SolidColorBrush x:Key="HoverBrush" Color="#FFF0F1F3"/>
+        <SolidColorBrush x:Key="PressedBrush" Color="#FFE2E5EA"/>
+        <SolidColorBrush x:Key="SaveGreenBrush" Color="#FF2EA043"/>
+        <SolidColorBrush x:Key="SaveGreenPressedBrush" Color="#FF258A38"/>
+
+        <!-- Flat rounded button: icon (optional) + small label, modern app style -->
+        <Style x:Key="ToolButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="MinWidth" Value="58"/>
+            <Setter Property="Margin" Value="2,4"/>
+            <Setter Property="Padding" Value="8,5"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="8" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Primary action button (Save) -->
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Background" Value="{StaticResource SaveGreenBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="MinWidth" Value="86"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="8" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SaveGreenPressedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SaveGreenPressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Secondary outline button (Overwrite original) -->
+        <Style x:Key="OutlineButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="MinWidth" Value="86"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{StaticResource BorderBrush1}" BorderThickness="1.2"
+                                CornerRadius="8" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Margin="{TemplateBinding Padding}"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Circular color swatch -->
+        <Style x:Key="ColorSwatch" TargetType="Button">
+            <Setter Property="Width" Value="30"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Margin" Value="4,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Ellipse Width="30" Height="30" Stroke="{StaticResource AccentBrush}"
+                                     StrokeThickness="{Binding RelativeSource={RelativeSource TemplatedParent}, Path=BorderThickness.Left}"/>
+                            <Ellipse Width="22" Height="22" Fill="{TemplateBinding Background}"
+                                     Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1"/>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="VerticalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="12,0,6,0"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+        </Style>
+
+        <Style x:Key="DividerStyle" TargetType="Border">
+            <Setter Property="Width" Value="1"/>
+            <Setter Property="Margin" Value="6,10"/>
+            <Setter Property="Background" Value="{StaticResource BorderBrush1}"/>
+        </Style>
+    </Window.Resources>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{StaticResource ToolbarBrush}" BorderBrush="{StaticResource BorderBrush1}" BorderThickness="0,0,0,1">
+            <WrapPanel Orientation="Horizontal" Margin="8,4">
+                <Button x:Name="BtnOpen" Style="{StaticResource ToolButton}" Click="BtnOpen_Click" ToolTip="打开图片 (Ctrl+O)">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Rectangle Canvas.Left="1" Canvas.Top="3" Width="18" Height="14" RadiusX="2" RadiusY="2" Stroke="{StaticResource IconBrush}" StrokeThickness="1.6"/>
+                                <Ellipse Canvas.Left="4" Canvas.Top="6" Width="3" Height="3" Fill="{StaticResource IconBrush}"/>
+                                <Polyline Points="2,16 7,10 10,13 14,8 18,14" Stroke="{StaticResource IconBrush}" StrokeThickness="1.6" StrokeLineJoin="Round"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="打开图片" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnOpenMultiple" Style="{StaticResource ToolButton}" Click="BtnOpenMultiple_Click" ToolTip="打开多张图片，批量处理">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Rectangle Canvas.Left="5" Canvas.Top="1" Width="14" Height="11" RadiusX="2" RadiusY="2" Stroke="{StaticResource IconBrush}" StrokeThickness="1.5" Fill="White"/>
+                                <Rectangle Canvas.Left="1" Canvas.Top="6" Width="14" Height="11" RadiusX="2" RadiusY="2" Stroke="{StaticResource IconBrush}" StrokeThickness="1.6" Fill="White"/>
+                                <Ellipse Canvas.Left="4" Canvas.Top="9" Width="2.4" Height="2.4" Fill="{StaticResource IconBrush}"/>
+                                <Polyline Points="2,15 6,11 9,13 12,9.5 14,12" Stroke="{StaticResource IconBrush}" StrokeThickness="1.3" StrokeLineJoin="Round"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="打开多张" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Border Style="{StaticResource DividerStyle}"/>
+
+                <Button x:Name="BtnSelect" Style="{StaticResource ToolButton}" Tag="Select" Click="ToolButton_Click" ToolTip="选择/移动标注">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Polygon Points="3,2 3,16 6.5,12.7 8.5,17.5 10.7,16.6 8.7,12 13,12" Fill="{StaticResource IconBrush}"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="选择/移动" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnRect" Style="{StaticResource ToolButton}" Tag="Rectangle" Click="ToolButton_Click" ToolTip="画框">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Rectangle Canvas.Left="2" Canvas.Top="4" Width="16" Height="12" Stroke="{StaticResource IconBrush}" StrokeThickness="2"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="画框" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnEllipse" Style="{StaticResource ToolButton}" Tag="Ellipse" Click="ToolButton_Click" ToolTip="画圈">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Ellipse Canvas.Left="2" Canvas.Top="2" Width="16" Height="16" Stroke="{StaticResource IconBrush}" StrokeThickness="2"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="画圈" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnArrow" Style="{StaticResource ToolButton}" Tag="Arrow" Click="ToolButton_Click" ToolTip="箭头">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Line X1="3" Y1="17" X2="17" Y2="3" Stroke="{StaticResource IconBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <Line X1="17" Y1="3" X2="10" Y2="4" Stroke="{StaticResource IconBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                <Line X1="17" Y1="3" X2="16" Y2="10" Stroke="{StaticResource IconBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="箭头" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnFreehand" Style="{StaticResource ToolButton}" Tag="Freehand" Click="ToolButton_Click" ToolTip="画笔涂鸦">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Polyline Points="2,15 6,7 9,13 12,5 15,11 18,4" Stroke="{StaticResource IconBrush}" StrokeThickness="2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="画笔" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnMosaic" Style="{StaticResource ToolButton}" Tag="Mosaic" Click="ToolButton_Click" ToolTip="马赛克遮挡">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Rectangle Canvas.Left="1" Canvas.Top="1" Width="8" Height="8" Fill="{StaticResource IconBrush}"/>
+                                <Rectangle Canvas.Left="11" Canvas.Top="1" Width="8" Height="8" Fill="#FFB0B4BA"/>
+                                <Rectangle Canvas.Left="1" Canvas.Top="11" Width="8" Height="8" Fill="#FFB0B4BA"/>
+                                <Rectangle Canvas.Left="11" Canvas.Top="11" Width="8" Height="8" Fill="{StaticResource IconBrush}"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="马赛克" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="BtnText" Style="{StaticResource ToolButton}" Tag="Text" Click="ToolButton_Click" ToolTip="加文字">
+                    <StackPanel>
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="20" Height="20">
+                                <Rectangle Canvas.Left="2" Canvas.Top="2" Width="16" Height="3" Fill="{StaticResource IconBrush}"/>
+                                <Rectangle Canvas.Left="8.5" Canvas.Top="2" Width="3" Height="16" Fill="{StaticResource IconBrush}"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="加文字" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Border Style="{StaticResource DividerStyle}"/>
+
+                <Button Style="{StaticResource ToolButton}" Click="BtnUndo_Click" ToolTip="撤销 (Ctrl+Z)">
+                    <TextBlock Text="撤销" Margin="4,0"/>
+                </Button>
+                <Button Style="{StaticResource ToolButton}" Click="BtnRedo_Click" ToolTip="重做 (Ctrl+Shift+Z)">
+                    <TextBlock Text="重做" Margin="4,0"/>
+                </Button>
+                <Button Style="{StaticResource ToolButton}" Click="BtnDelete_Click" ToolTip="删除选中 (Delete)">
+                    <TextBlock Text="删除选中" Margin="4,0"/>
+                </Button>
+
+                <Border Style="{StaticResource DividerStyle}"/>
+
+                <Button Style="{StaticResource ToolButton}" Click="BtnZoomOut_Click" ToolTip="缩小 (Ctrl+-)">
+                    <TextBlock Text="缩小" Margin="4,0"/>
+                </Button>
+                <Button Style="{StaticResource ToolButton}" Click="BtnZoomReset_Click" ToolTip="实际大小 (Ctrl+1)">
+                    <TextBlock Text="实际大小" Margin="4,0"/>
+                </Button>
+                <Button Style="{StaticResource ToolButton}" Click="BtnZoomIn_Click" ToolTip="放大 (Ctrl++)">
+                    <TextBlock Text="放大" Margin="4,0"/>
+                </Button>
+
+                <Border Style="{StaticResource DividerStyle}"/>
+
+                <Button x:Name="BtnSave" Style="{StaticResource PrimaryButton}" Click="BtnSave_Click" ToolTip="保存 (Ctrl+S)">
+                    <TextBlock Text="保存" Margin="4,0"/>
+                </Button>
+                <Button x:Name="BtnOverwrite" Style="{StaticResource OutlineButton}" Click="BtnOverwrite_Click" ToolTip="覆盖原图">
+                    <TextBlock Text="覆盖原图" Margin="4,0"/>
+                </Button>
+            </WrapPanel>
+        </Border>
+        <Border DockPanel.Dock="Top" Background="{StaticResource ToolbarBrush}" BorderBrush="{StaticResource BorderBrush1}" BorderThickness="0,0,0,1">
+            <WrapPanel Orientation="Horizontal" Margin="8,4">
+                <TextBlock Text="颜色" Style="{StaticResource SectionLabel}" Margin="6,0,6,0"/>
+                <Button x:Name="ClrRed" Style="{StaticResource ColorSwatch}" Background="Red" Tag="Red" Click="Color_Click"/>
+                <Button x:Name="ClrGold" Style="{StaticResource ColorSwatch}" Background="Gold" Tag="Gold" Click="Color_Click"/>
+                <Button x:Name="ClrLime" Style="{StaticResource ColorSwatch}" Background="Lime" Tag="Lime" Click="Color_Click"/>
+                <Button x:Name="ClrSky" Style="{StaticResource ColorSwatch}" Background="DeepSkyBlue" Tag="DeepSkyBlue" Click="Color_Click"/>
+                <Button x:Name="ClrBlack" Style="{StaticResource ColorSwatch}" Background="Black" Tag="Black" Click="Color_Click"/>
+                <Button x:Name="ClrWhite" Style="{StaticResource ColorSwatch}" Background="White" BorderBrush="#FFCCCCCC" Tag="White" Click="Color_Click"/>
+
+                <Border Style="{StaticResource DividerStyle}"/>
+
+                <TextBlock Text="粗细" Style="{StaticResource SectionLabel}"/>
+                <Button x:Name="ThinBtn" Style="{StaticResource ToolButton}" MinWidth="48" Tag="3" Click="Thickness_Click" ToolTip="细">
+                    <StackPanel>
+                        <Rectangle Width="22" Height="2" Fill="{StaticResource IconBrush}" RadiusX="1" RadiusY="1"/>
+                        <TextBlock Text="细" HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="MidBtn" Style="{StaticResource ToolButton}" MinWidth="48" Tag="6" Click="Thickness_Click" ToolTip="中">
+                    <StackPanel>
+                        <Rectangle Width="22" Height="5" Fill="{StaticResource IconBrush}" RadiusX="2" RadiusY="2"/>
+                        <TextBlock Text="中" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Button>
+                <Button x:Name="ThickBtn" Style="{StaticResource ToolButton}" MinWidth="48" Tag="12" Click="Thickness_Click" ToolTip="粗">
+                    <StackPanel>
+                        <Rectangle Width="22" Height="8" Fill="{StaticResource IconBrush}" RadiusX="3" RadiusY="3"/>
+                        <TextBlock Text="粗" HorizontalAlignment="Center" Margin="0,3,0,0"/>
+                    </StackPanel>
+                </Button>
+
+                <Border Style="{StaticResource DividerStyle}"/>
+
+                <TextBlock Text="字号" Style="{StaticResource SectionLabel}"/>
+                <Button Style="{StaticResource ToolButton}" MinWidth="44" Click="BtnFontSmaller_Click" ToolTip="文字缩小（先选中文字再点）">
+                    <TextBlock Text="A" FontSize="12" FontWeight="Bold"/>
+                </Button>
+                <Button Style="{StaticResource ToolButton}" MinWidth="44" Click="BtnFontBigger_Click" ToolTip="文字放大（先选中文字再点）">
+                    <TextBlock Text="A" FontSize="20" FontWeight="Bold"/>
+                </Button>
+            </WrapPanel>
+        </Border>
+        <Border x:Name="BatchBar" DockPanel.Dock="Top" Background="{StaticResource AccentLightBrush}" Visibility="Collapsed">
+            <WrapPanel Orientation="Horizontal" Margin="8,4">
+                <Button Style="{StaticResource ToolButton}" Click="BtnPrevImage_Click">
+                    <TextBlock Text="◀ 上一张" Margin="4,0"/>
+                </Button>
+                <TextBlock x:Name="BatchPositionText" VerticalAlignment="Center" Margin="10,0" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
+                <Button Style="{StaticResource ToolButton}" Click="BtnNextImage_Click">
+                    <TextBlock Text="下一张 ▶" Margin="4,0"/>
+                </Button>
+            </WrapPanel>
+        </Border>
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource ToolbarBrush}" BorderBrush="{StaticResource BorderBrush1}" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="StatusText" Text="请打开一张图片，或按 Ctrl+V 粘贴截图，也可以直接把图片拖进窗口"
+                       Margin="12,7" FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}"/>
+        </Border>
+        <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF5B5F66">
+            <local:AnnotationCanvas x:Name="Canvas1"/>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
