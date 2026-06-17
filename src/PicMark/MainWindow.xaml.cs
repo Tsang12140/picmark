@@ -220,6 +220,7 @@ namespace PicMark
             _currentFilePath = path;
             _currentExtension = ext == ".webp" ? ".png" : ext;
             _hasUnsavedChanges = false;
+            TopFileNameText.Text = Path.GetFileName(path);
             AutoFitZoom();
             UpdateStatus($"已打开：{Path.GetFileName(path)}（{bmp.PixelWidth}×{bmp.PixelHeight}像素）");
         }
@@ -257,6 +258,7 @@ namespace PicMark
             _currentFilePath = null;
             _currentExtension = ".png";
             _hasUnsavedChanges = false;
+            TopFileNameText.Text = "剪贴板图片.png";
             AutoFitZoom();
             UpdateStatus("已粘贴剪贴板图片，保存时请选择保存位置");
         }
@@ -279,7 +281,7 @@ namespace PicMark
         private void SetActiveTool(string tag)
         {
             Canvas1.CurrentTool = (AnnotationTool)Enum.Parse(typeof(AnnotationTool), tag);
-            foreach (var btn in new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText })
+            foreach (var btn in new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText, PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText })
                 btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
         }
 
@@ -295,7 +297,7 @@ namespace PicMark
 
         private void SetActiveColorButton(string tag)
         {
-            foreach (var btn in new[] { ClrRed, ClrGold, ClrLime, ClrSky, ClrBlack, ClrWhite })
+            foreach (var btn in new[] { ClrRed, ClrGold, ClrLime, ClrSky, ClrBlack, ClrWhite, ClrRedPanel, ClrGoldPanel, ClrLimePanel, ClrSkyPanel, ClrBlackPanel, ClrWhitePanel })
                 btn.BorderThickness = (string)btn.Tag == tag ? new Thickness(3) : new Thickness(1);
         }
 
@@ -323,7 +325,7 @@ namespace PicMark
 
         private void SetActiveThicknessButton(string tag)
         {
-            foreach (var btn in new[] { ThinBtn, MidBtn, ThickBtn })
+            foreach (var btn in new[] { ThinBtn, MidBtn, ThickBtn, ThinPanelBtn, MidPanelBtn, ThickPanelBtn })
                 btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
         }
 
@@ -339,7 +341,7 @@ namespace PicMark
 
         private void SetActiveFontButton(string tag)
         {
-            foreach (var btn in new[] { FontSmallBtn, FontMidBtn, FontLargeBtn, FontHugeBtn })
+            foreach (var btn in new[] { FontSmallBtn, FontMidBtn, FontLargeBtn, FontHugeBtn, FontSmallPanelBtn, FontMidPanelBtn, FontLargePanelBtn, FontHugePanelBtn })
                 btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
         }
 
@@ -389,6 +391,33 @@ namespace PicMark
         }
 
         private void BtnSave_Click(object sender, RoutedEventArgs e) => SaveAnnotatedImage(false);
+
+        private void BtnSaveMenu_Click(object sender, RoutedEventArgs e)
+        {
+            BtnSave.ContextMenu.PlacementTarget = BtnSave;
+            BtnSave.ContextMenu.IsOpen = true;
+        }
+
+        private void MenuSaveAs_Click(object sender, RoutedEventArgs e) => SaveAnnotatedImage(false);
+
+        private void MenuOverwrite_Click(object sender, RoutedEventArgs e) => BtnOverwrite_Click(sender, e);
+
+        private void MenuCopy_Click(object sender, RoutedEventArgs e)
+        {
+            if (Canvas1.Image == null)
+            {
+                MessageBox.Show(this, "请先打开一张图片。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            Clipboard.SetImage(Canvas1.RenderFullResolution());
+            UpdateStatus("已复制标注后的图片到剪贴板");
+        }
+
+        private void BtnBack_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
 
         private void BtnOverwrite_Click(object sender, RoutedEventArgs e)
         {
