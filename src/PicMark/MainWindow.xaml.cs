@@ -249,8 +249,7 @@ namespace PicMark
             var ext = Path.GetExtension(path).ToLowerInvariant();
             if (Array.IndexOf(SupportedExtensions, ext) < 0)
             {
-                MessageBox.Show(this, "暂不支持这种图片格式，请使用 jpg、png、bmp 或 webp 格式。", "提示",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppDialog.Show(this, "暂不支持这种图片格式，请使用 jpg、png、bmp 或 webp 格式。", "提示");
                 return;
             }
 
@@ -261,8 +260,7 @@ namespace PicMark
             }
             catch (Exception ex)
             {
-                MessageBox.Show(this, $"无法打开这张图片：{ex.Message}", "提示",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppDialog.Show(this, $"无法打开这张图片：{ex.Message}", "提示");
                 return;
             }
 
@@ -555,7 +553,7 @@ namespace PicMark
             SavePopup.IsOpen = false;
             if (Canvas1.Image == null)
             {
-                MessageBox.Show(this, "请先打开一张图片。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                AppDialog.Show(this, "请先打开一张图片。", "提示");
                 return;
             }
 
@@ -572,12 +570,11 @@ namespace PicMark
         {
             if (_currentFilePath == null)
             {
-                MessageBox.Show(this, "这张图片还没有对应的原文件路径（比如是粘贴来的截图），无法覆盖，请用“保存”另存为新文件。",
-                    "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                AppDialog.Show(this, "这张图片还没有对应的原文件路径（比如是粘贴来的截图），无法覆盖，请用“保存”另存为新文件。", "提示");
                 return;
             }
-            var result = MessageBox.Show(this, "确定要覆盖原图吗？原图将被替换，无法恢复。",
-                "确认覆盖原图", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+            var result = AppDialog.Show(this, "确定要覆盖原图吗？原图将被替换，无法恢复。",
+                "确认覆盖原图", MessageBoxButton.YesNo);
             if (result == MessageBoxResult.Yes) SaveAnnotatedImage(true);
         }
 
@@ -585,7 +582,7 @@ namespace PicMark
         {
             if (Canvas1.Image == null)
             {
-                MessageBox.Show(this, "请先打开一张图片。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                AppDialog.Show(this, "请先打开一张图片。", "提示");
                 return false;
             }
 
@@ -771,11 +768,10 @@ namespace PicMark
                 ? "尝试自动保存历史版本失败，请先手动另存为更稳妥。"
                 : $"已自动存入历史版本：{Path.GetFileName(historyPath)}";
 
-            var result = MessageBox.Show(this,
+            var result = AppDialog.Show(this,
                 $"当前图片还有未保存的标注。\n{historyLine}\n\n要另存为新图片再{actionName}吗？\n\n是：先另存为\n否：不另存，继续{actionName}\n取消：留在当前图片",
                 "未保存的标注",
-                MessageBoxButton.YesNoCancel,
-                MessageBoxImage.Warning);
+                MessageBoxButton.YesNoCancel);
 
             if (result == MessageBoxResult.Cancel) return false;
             if (result == MessageBoxResult.No)

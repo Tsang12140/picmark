@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using WinForms = System.Windows.Forms;
 
@@ -125,7 +126,7 @@ namespace PicMark
         {
             if (!int.TryParse(WidthBox.Text, out int width) || !int.TryParse(HeightBox.Text, out int height) || width <= 0 || height <= 0)
             {
-                MessageBox.Show(this, "尺寸不正确。", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                AppDialog.Show(this, "尺寸不正确。", "提示");
                 return;
             }
             string dir = PathBox.Text.Trim();
@@ -143,6 +144,12 @@ namespace PicMark
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
+
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 1)
+                DragMove();
+        }
 
         private string GetSelectedExtension() => (string)((ComboBoxItem)ExtCombo.SelectedItem).Content;
 
