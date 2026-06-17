@@ -32,6 +32,7 @@ namespace PicMark
         public event EventHandler AnnotationsChanged;
         public event EventHandler SelectionChanged;
         public event EventHandler TextEditFinished;
+        public event EventHandler ScaleChanged;
 
         public Annotation Selected => _selected;
         public bool IsTextSelected => _selected is TextAnnotation;
@@ -52,9 +53,12 @@ namespace PicMark
             get => _scale;
             set
             {
-                _scale = Math.Max(0.05, Math.Min(value, 8.0));
+                double next = Math.Max(0.05, Math.Min(value, 8.0));
+                if (Math.Abs(_scale - next) < 0.0001) return;
+                _scale = next;
                 InvalidateMeasure();
                 InvalidateVisual();
+                ScaleChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 

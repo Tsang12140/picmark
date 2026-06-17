@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -24,6 +25,7 @@ namespace PicMark
         private int _batchIndex = -1;
         private bool _hasUnsavedChanges;
         private readonly AppSettings _settings;
+        private bool _updatingZoomCombo;
 
         public MainWindow()
         {
@@ -33,10 +35,14 @@ namespace PicMark
             Canvas1.AnnotationsChanged += (s, e) => MarkDirty();
             Canvas1.SelectionChanged += Canvas1_SelectionChanged;
             Canvas1.TextEditFinished += (s, e) => SetActiveTool("Select");
+            Canvas1.ScaleChanged += (s, e) => UpdateZoomControls();
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             Closing += MainWindow_Closing;
             Scroller.PreviewMouseWheel += Scroller_PreviewMouseWheel;
             ApplyOptionSettings();
+            HistoryCacheText.Text = _settings.HistoryCacheMb.ToString();
+            UpdateHistoryCacheInfo();
+            UpdateZoomControls();
         }
 
         public void OpenInitialFiles(IEnumerable<string> paths)
@@ -114,6 +120,7 @@ namespace PicMark
 
         private void SaveWindowSettings()
         {
+            ApplyHistoryCacheSetting(false);
             var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
             _settings.WindowLeft = bounds.Left;
             _settings.WindowTop = bounds.Top;
@@ -308,6 +315,39 @@ namespace PicMark
             double viewH = Math.Max(Scroller.ActualHeight - 20, 200);
             double fit = Math.Min(viewW / Canvas1.Image.PixelWidth, viewH / Canvas1.Image.PixelHeight);
             Canvas1.Scale = Math.Min(fit, 1.0);
+        }
+
+        private void UpdateZoomControls()
+        {
+            if (ZoomCombo == null) return;
+            _updatingZoomCombo = true;
+            ZoomCombo.Text = $"{Math.Round(Canvas1.Scale * 100)}%";
+            _updatingZoomCombo = false;
+        }
+
+        private void ZoomCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_updatingZoomCombo || ZoomCombo.SelectedItem == null) return;
+            var item = ZoomCombo.SelectedItem as ComboBoxItem;
+            string tag = item?.Tag as string;
+            if (tag == "Fit")
+            {
+                AutoFitZoom();
+            }
+            else if (double.TryParse(tag, out double scale))
+            {
+                Canvas1.Scale = scale;
+            }
+            ZoomCombo.SelectedItem = null;
+            UpdateZoomControls();
+        }
+
+        private void BtnZoomFit_Click(object sender, RoutedEventArgs e) => AutoFitZoom();
+
+        private void BtnPan_Click(object sender, RoutedEventArgs e)
+        {
+            SetActiveTool("Select");
+            UpdateStatus("已切回选择/移动。");
         }
 
         private void ToolButton_Click(object sender, RoutedEventArgs e)
@@ -557,6 +597,58 @@ namespace PicMark
             return true;
         }
 
+        private string CaptureHistoryVersion(string reason)
+        {
+            if (Canvas1.Image == null) return null;
+
+            try
+            {
+                string path = HistoryManager.SaveVersion(
+                    Canvas1.RenderFullResolution(),
+                    _currentFilePath,
+                    _settings.HistoryCacheMb,
+                    reason);
+                UpdateHistoryCacheInfo();
+                return path;
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus($"历史版本保存失败：{ex.Message}");
+                return null;
+            }
+        }
+
+        private void BtnHistory_Click(object sender, RoutedEventArgs e)
+        {
+            Directory.CreateDirectory(HistoryManager.HistoryDirectory);
+            Process.Start(HistoryManager.HistoryDirectory);
+            UpdateHistoryCacheInfo();
+        }
+
+        private void BtnApplyHistoryCache_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyHistoryCacheSetting(true);
+            _settings.Save();
+            UpdateHistoryCacheInfo();
+        }
+
+        private void ApplyHistoryCacheSetting(bool trimNow)
+        {
+            if (HistoryCacheText == null) return;
+            if (!int.TryParse(HistoryCacheText.Text, out int cacheMb)) cacheMb = 500;
+            cacheMb = Math.Max(20, Math.Min(cacheMb, 10240));
+            _settings.HistoryCacheMb = cacheMb;
+            HistoryCacheText.Text = cacheMb.ToString();
+            if (trimNow) HistoryManager.TrimCache(cacheMb);
+        }
+
+        private void UpdateHistoryCacheInfo()
+        {
+            if (HistoryCacheInfoText == null) return;
+            double usedMb = HistoryManager.GetCacheBytes() / 1024.0 / 1024.0;
+            HistoryCacheInfoText.Text = $"当前约 {usedMb:0.#} MB / 上限 {_settings.HistoryCacheMb} MB";
+        }
+
         private static string GetNonConflictingPath(string dir, string baseName, string ext)
         {
             string candidate = Path.Combine(dir, baseName + ext);
@@ -573,14 +665,23 @@ namespace PicMark
         {
             if (!_hasUnsavedChanges) return true;
 
+            string historyPath = CaptureHistoryVersion(actionName);
+            string historyLine = historyPath == null
+                ? "尝试自动保存历史版本失败，请先手动另存为更稳妥。"
+                : $"已自动存入历史版本：{Path.GetFileName(historyPath)}";
+
             var result = MessageBox.Show(this,
-                $"当前图片还有未保存的标注。要先保存再{actionName}吗？\n\n选择“是”会先保存；选择“否”会放弃这些标注；选择“取消”会留在当前图片。",
+                $"当前图片还有未保存的标注。\n{historyLine}\n\n要另存为新图片再{actionName}吗？\n\n是：先另存为\n否：不另存，继续{actionName}\n取消：留在当前图片",
                 "未保存的标注",
                 MessageBoxButton.YesNoCancel,
                 MessageBoxImage.Warning);
 
             if (result == MessageBoxResult.Cancel) return false;
-            if (result == MessageBoxResult.No) return true;
+            if (result == MessageBoxResult.No)
+            {
+                _hasUnsavedChanges = false;
+                return true;
+            }
             return SaveAnnotatedImage(false);
         }
 

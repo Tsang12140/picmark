@@ -22,6 +22,7 @@ namespace PicMark
         public string Color { get; set; } = "Red";
         public string Thickness { get; set; } = "6";
         public string FontSize { get; set; } = "36";
+        public int HistoryCacheMb { get; set; } = 500;
 
         public static AppSettings Load()
         {
@@ -52,7 +53,8 @@ namespace PicMark
                 "Tool=" + Tool,
                 "Color=" + Color,
                 "Thickness=" + Thickness,
-                "FontSize=" + FontSize
+                "FontSize=" + FontSize,
+                "HistoryCacheMb=" + HistoryCacheMb
             };
             File.WriteAllLines(SettingsPath, lines);
         }
@@ -72,6 +74,7 @@ namespace PicMark
                 case "Color": Color = value; break;
                 case "Thickness": Thickness = value; break;
                 case "FontSize": FontSize = value; break;
+                case "HistoryCacheMb": HistoryCacheMb = ParseInt(value, HistoryCacheMb); break;
             }
         }
 
@@ -81,6 +84,13 @@ namespace PicMark
         private static double ParseDouble(string value, double fallback)
         {
             return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)
+                ? parsed
+                : fallback;
+        }
+
+        private static int ParseInt(string value, int fallback)
+        {
+            return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
                 ? parsed
                 : fallback;
         }
