@@ -83,6 +83,24 @@
             <Setter Property="Margin" Value="4"/>
         </Style>
 
+        <Style x:Key="PanelTitle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Margin" Value="0,0,0,18"/>
+        </Style>
+
+        <Style x:Key="PanelToolButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+            <Setter Property="Width" Value="88"/>
+            <Setter Property="Height" Value="72"/>
+            <Setter Property="Margin" Value="6"/>
+            <Setter Property="Background" Value="#FF424242"/>
+            <Setter Property="BorderBrush" Value="#FF5A5A5A"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
         <Style x:Key="ColorSwatch" TargetType="Button">
             <Setter Property="Width" Value="28"/>
             <Setter Property="Height" Value="28"/>
@@ -201,11 +219,11 @@
 
         <Grid Background="#FF242424">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="164"/>
                 <ColumnDefinition/>
+                <ColumnDefinition Width="342"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="{StaticResource PanelBrush}" BorderBrush="#FF454545" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Visibility="Collapsed" Background="{StaticResource PanelBrush}" BorderBrush="#FF454545" BorderThickness="0,0,1,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="10,10,10,16">
                         <Button x:Name="BtnOpenMultiple" Style="{StaticResource FeatureButton}" Click="BtnOpenMultiple_Click">
@@ -283,37 +301,15 @@
                                 <ColumnDefinition/>
                                 <ColumnDefinition Width="54"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="HistoryCacheText" Style="{StaticResource PanelTextBox}" ToolTip="历史缓存上限，单位 MB"/>
+                            <TextBox x:Name="HiddenHistoryCacheText" Style="{StaticResource PanelTextBox}" ToolTip="历史缓存上限，单位 MB"/>
                             <Button Grid.Column="1" Style="{StaticResource ToolButton}" Height="32" Margin="6,0,0,0" Click="BtnApplyHistoryCache_Click"><TextBlock Text="应用"/></Button>
                         </Grid>
-                        <TextBlock x:Name="HistoryCacheInfoText" Margin="4,7,0,0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
-
-                        <StackPanel Visibility="Collapsed">
-                            <Button x:Name="PanelBtnRect" Tag="Rectangle"/>
-                            <Button x:Name="PanelBtnEllipse" Tag="Ellipse"/>
-                            <Button x:Name="PanelBtnArrow" Tag="Arrow"/>
-                            <Button x:Name="PanelBtnText" Tag="Text"/>
-                            <Button x:Name="PanelBtnFreehand" Tag="Freehand"/>
-                            <Button x:Name="PanelBtnMosaic" Tag="Mosaic"/>
-                            <Button x:Name="ClrRedPanel" Tag="Red"/>
-                            <Button x:Name="ClrGoldPanel" Tag="Gold"/>
-                            <Button x:Name="ClrLimePanel" Tag="Lime"/>
-                            <Button x:Name="ClrSkyPanel" Tag="DeepSkyBlue"/>
-                            <Button x:Name="ClrBlackPanel" Tag="Black"/>
-                            <Button x:Name="ClrWhitePanel" Tag="White"/>
-                            <Button x:Name="ThinPanelBtn" Tag="3"/>
-                            <Button x:Name="MidPanelBtn" Tag="6"/>
-                            <Button x:Name="ThickPanelBtn" Tag="12"/>
-                            <Button x:Name="FontSmallPanelBtn" Tag="24"/>
-                            <Button x:Name="FontMidPanelBtn" Tag="36"/>
-                            <Button x:Name="FontLargePanelBtn" Tag="52"/>
-                            <Button x:Name="FontHugePanelBtn" Tag="72"/>
-                        </StackPanel>
+                        <TextBlock x:Name="HiddenHistoryCacheInfoText" Margin="4,7,0,0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
 
-            <Grid Grid.Column="1" Background="#FF242424">
+            <Grid Grid.Column="0" Background="#FF242424">
                 <Border x:Name="BatchBar" VerticalAlignment="Top" Background="#FF353B73" Visibility="Collapsed" Panel.ZIndex="3">
                     <WrapPanel Orientation="Horizontal" Margin="8,4">
                         <Button Style="{StaticResource ToolButton}" Click="BtnPrevImage_Click"><TextBlock Text="上一张"/></Button>
@@ -368,6 +364,71 @@
                     </StackPanel>
                 </Border>
             </Grid>
+
+            <Border Grid.Column="1" Background="#FF3A3A3A" BorderBrush="#FF454545" BorderThickness="1,0,0,0" Padding="18">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="标注工具" Style="{StaticResource PanelTitle}"/>
+                        <UniformGrid Columns="3" Margin="-4,0,0,6">
+                            <Button x:Name="PanelBtnRect" Style="{StaticResource PanelToolButton}" Tag="Rectangle" Click="ToolButton_Click"><TextBlock Text="框选" HorizontalAlignment="Center"/></Button>
+                            <Button x:Name="PanelBtnEllipse" Style="{StaticResource PanelToolButton}" Tag="Ellipse" Click="ToolButton_Click"><TextBlock Text="圈选" HorizontalAlignment="Center"/></Button>
+                            <Button x:Name="PanelBtnArrow" Style="{StaticResource PanelToolButton}" Tag="Arrow" Click="ToolButton_Click"><TextBlock Text="箭头" HorizontalAlignment="Center"/></Button>
+                            <Button x:Name="PanelBtnText" Style="{StaticResource PanelToolButton}" Tag="Text" Click="ToolButton_Click"><TextBlock Text="文字" HorizontalAlignment="Center"/></Button>
+                            <Button x:Name="PanelBtnFreehand" Style="{StaticResource PanelToolButton}" Tag="Freehand" Click="ToolButton_Click"><TextBlock Text="画笔" HorizontalAlignment="Center"/></Button>
+                            <Button x:Name="PanelBtnMosaic" Style="{StaticResource PanelToolButton}" Tag="Mosaic" Click="ToolButton_Click"><TextBlock Text="马赛克" HorizontalAlignment="Center"/></Button>
+                        </UniformGrid>
+
+                        <TextBlock Text="颜色" Style="{StaticResource SectionLabel}"/>
+                        <WrapPanel>
+                            <Button x:Name="ClrRedPanel" Style="{StaticResource ColorSwatch}" Background="Red" Tag="Red" Click="Color_Click"/>
+                            <Button x:Name="ClrGoldPanel" Style="{StaticResource ColorSwatch}" Background="Gold" Tag="Gold" Click="Color_Click"/>
+                            <Button x:Name="ClrLimePanel" Style="{StaticResource ColorSwatch}" Background="Lime" Tag="Lime" Click="Color_Click"/>
+                            <Button x:Name="ClrSkyPanel" Style="{StaticResource ColorSwatch}" Background="DeepSkyBlue" Tag="DeepSkyBlue" Click="Color_Click"/>
+                            <Button x:Name="ClrBlackPanel" Style="{StaticResource ColorSwatch}" Background="Black" Tag="Black" Click="Color_Click"/>
+                            <Button x:Name="ClrWhitePanel" Style="{StaticResource ColorSwatch}" Background="White" BorderBrush="#FFCCCCCC" Tag="White" Click="Color_Click"/>
+                        </WrapPanel>
+
+                        <TextBlock Text="画笔大小" Style="{StaticResource SectionLabel}"/>
+                        <UniformGrid Columns="3">
+                            <Button x:Name="ThinPanelBtn" Style="{StaticResource ToolButton}" Tag="3" Click="Thickness_Click"><TextBlock Text="细"/></Button>
+                            <Button x:Name="MidPanelBtn" Style="{StaticResource ToolButton}" Tag="6" Click="Thickness_Click"><TextBlock Text="中"/></Button>
+                            <Button x:Name="ThickPanelBtn" Style="{StaticResource ToolButton}" Tag="12" Click="Thickness_Click"><TextBlock Text="粗"/></Button>
+                        </UniformGrid>
+
+                        <TextBlock Text="文字字号" Style="{StaticResource SectionLabel}"/>
+                        <UniformGrid Columns="4">
+                            <Button x:Name="FontSmallPanelBtn" Style="{StaticResource ToolButton}" Tag="24" Click="FontSize_Click"><TextBlock Text="24"/></Button>
+                            <Button x:Name="FontMidPanelBtn" Style="{StaticResource ToolButton}" Tag="36" Click="FontSize_Click"><TextBlock Text="36"/></Button>
+                            <Button x:Name="FontLargePanelBtn" Style="{StaticResource ToolButton}" Tag="52" Click="FontSize_Click"><TextBlock Text="52"/></Button>
+                            <Button x:Name="FontHugePanelBtn" Style="{StaticResource ToolButton}" Tag="72" Click="FontSize_Click"><TextBlock Text="72"/></Button>
+                        </UniformGrid>
+
+                        <TextBlock Text="保存" Style="{StaticResource SectionLabel}"/>
+                        <Button Style="{StaticResource PrimaryButton}" Height="46" Margin="0,8,0,8" Click="MenuSaveAs_Click">
+                            <TextBlock Text="另存为新图片"/>
+                        </Button>
+                        <Button Style="{StaticResource ToolButton}" Height="38" Click="MenuOverwrite_Click">
+                            <TextBlock Text="覆盖原图"/>
+                        </Button>
+
+                        <TextBlock Text="历史缓存" Style="{StaticResource SectionLabel}"/>
+                        <Grid Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition/>
+                                <ColumnDefinition Width="74"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="HistoryCacheText" Style="{StaticResource PanelTextBox}"
+                                     ToolTip="历史缓存上限，单位 MB"/>
+                            <Button Grid.Column="1" Style="{StaticResource ToolButton}" Height="34" Margin="8,0,0,0"
+                                    Click="BtnApplyHistoryCache_Click">
+                                <TextBlock Text="应用"/>
+                            </Button>
+                        </Grid>
+                        <TextBlock x:Name="HistoryCacheInfoText" Margin="0,7,0,0"
+                                   FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
         </Grid>
     </DockPanel>
 </Window>
