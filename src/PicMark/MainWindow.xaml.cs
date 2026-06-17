@@ -268,6 +268,7 @@ namespace PicMark
 
             Canvas1.Image = bmp;
             Canvas1.ClearAll();
+            SetImageWorkspaceVisible(true);
             _currentFilePath = path;
             _currentExtension = ext == ".webp" ? ".png" : ext;
             _hasUnsavedChanges = false;
@@ -306,6 +307,7 @@ namespace PicMark
             ClearBatch();
             Canvas1.Image = src;
             Canvas1.ClearAll();
+            SetImageWorkspaceVisible(true);
             _currentFilePath = null;
             _currentExtension = ".png";
             _hasUnsavedChanges = false;
@@ -326,6 +328,12 @@ namespace PicMark
             double viewH = Math.Max(Scroller.ActualHeight - 20, 200);
             double fit = Math.Min(viewW / Canvas1.Image.PixelWidth, viewH / Canvas1.Image.PixelHeight);
             Canvas1.Scale = fit;
+        }
+
+        private void SetImageWorkspaceVisible(bool hasImage)
+        {
+            CanvasFrame.Visibility = hasImage ? Visibility.Visible : Visibility.Collapsed;
+            EmptyState.Visibility = hasImage ? Visibility.Collapsed : Visibility.Visible;
         }
 
         private void UpdateZoomControls()
@@ -593,40 +601,101 @@ namespace PicMark
             {
                 string baseDir = _currentFilePath != null
                     ? Path.GetDirectoryName(_currentFilePath)
-                    : Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+                    : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
                 string baseName = _currentFilePath != null
                     ? Path.GetFileNameWithoutExtension(_currentFilePath) + "_标注"
                     : "粘贴图片_标注";
-                string suggested = GetNonConflictingPath(baseDir, baseName, ext);
-
-                var dlg = new SaveFileDialog
+                var options = new SaveOptionsDialog(Canvas1.RenderFullResolution(), _currentFilePath, ext)
                 {
-                    Filter = "PNG 图片(完全无损)|*.png|JPEG 图片(高质量)|*.jpg|位图(无损)|*.bmp",
-                    FileName = Path.GetFileName(suggested),
-                    InitialDirectory = baseDir
+                    Owner = this
                 };
-                if (dlg.ShowDialog() != true) return false;
-                targetPath = dlg.FileName;
-                ext = Path.GetExtension(targetPath).ToLowerInvariant();
+                if (options.ShowDialog() != true) return false;
+                targetPath = options.TargetPath;
+                ext = options.TargetExtension;
+                var rendered = Canvas1.RenderFullResolution();
+                SaveBitmapWithOptions(rendered, targetPath, ext, options.OutputWidth, options.OutputHeight, options.Quality, options.TargetBytes);
+                _hasUnsavedChanges = false;
+                UpdateStatus($"已保存：{targetPath}（原图未改动）");
+                return true;
             }
 
             var rtb = Canvas1.RenderFullResolution();
-            BitmapEncoder encoder;
-            if (ext == ".jpg" || ext == ".jpeg")
-                encoder = new JpegBitmapEncoder { QualityLevel = 95 };
-            else if (ext == ".bmp")
-                encoder = new BmpBitmapEncoder();
-            else
-                encoder = new PngBitmapEncoder();
-
-            encoder.Frames.Add(BitmapFrame.Create(rtb));
-
-            using (var fs = new FileStream(targetPath, FileMode.Create, FileAccess.Write))
-                encoder.Save(fs);
+            SaveBitmapWithOptions(rtb, targetPath, ext, rtb.PixelWidth, rtb.PixelHeight, 95, null);
 
             _hasUnsavedChanges = false;
             UpdateStatus(overwrite ? $"已保存（已覆盖原图）：{targetPath}" : $"已保存：{targetPath}（原图未改动）");
             return true;
+        }
+
+        private static void SaveBitmapWithOptions(BitmapSource source, string targetPath, string ext, int width, int height, int quality, long? targetBytes)
+        {
+            BitmapSource resized = ResizeBitmap(source, width, height);
+            byte[] bytes = EncodeBitmap(resized, ext, quality);
+
+            if (targetBytes.HasValue)
+            {
+                if (ext == ".jpg" || ext == ".jpeg")
+                {
+                    int low = 35;
+                    int high = Math.Max(35, Math.Min(quality, 98));
+                    byte[] best = bytes;
+                    for (int i = 0; i < 7; i++)
+                    {
+                        int q = (low + high) / 2;
+                        byte[] candidate = EncodeBitmap(resized, ext, q);
+                        if (candidate.Length > targetBytes.Value)
+                            high = q - 1;
+                        else
+                        {
+                            best = candidate;
+                            low = q + 1;
+                        }
+                    }
+                    bytes = best;
+                }
+                else
+                {
+                    double scale = 0.92;
+                    while (bytes.Length > targetBytes.Value && width > 120 && height > 120)
+                    {
+                        width = Math.Max(1, (int)(width * scale));
+                        height = Math.Max(1, (int)(height * scale));
+                        resized = ResizeBitmap(source, width, height);
+                        bytes = EncodeBitmap(resized, ext, quality);
+                    }
+                }
+            }
+
+            File.WriteAllBytes(targetPath, bytes);
+        }
+
+        private static BitmapSource ResizeBitmap(BitmapSource source, int width, int height)
+        {
+            if (source.PixelWidth == width && source.PixelHeight == height) return source;
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+                dc.DrawImage(source, new Rect(0, 0, width, height));
+            var rtb = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            rtb.Render(visual);
+            rtb.Freeze();
+            return rtb;
+        }
+
+        private static byte[] EncodeBitmap(BitmapSource source, string ext, int quality)
+        {
+            BitmapEncoder encoder;
+            if (ext == ".jpg" || ext == ".jpeg")
+                encoder = new JpegBitmapEncoder { QualityLevel = Math.Max(35, Math.Min(98, quality)) };
+            else if (ext == ".bmp")
+                encoder = new BmpBitmapEncoder();
+            else
+                encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(source));
+            using (var ms = new MemoryStream())
+            {
+                encoder.Save(ms);
+                return ms.ToArray();
+            }
         }
 
         private string CaptureHistoryVersion(string reason)
