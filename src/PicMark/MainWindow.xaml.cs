@@ -440,7 +440,7 @@ namespace PicMark
         private void SetActiveThicknessButton(string tag)
         {
             foreach (var btn in new[] { ThinBtn, MidBtn, ThickBtn, ThinPanelBtn, MidPanelBtn, ThickPanelBtn })
-                btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
+                SetChoiceButtonState(btn, (string)btn.Tag == tag);
         }
 
         private void FontSize_Click(object sender, RoutedEventArgs e)
@@ -464,9 +464,9 @@ namespace PicMark
             foreach (var btn in buttons)
             {
                 bool active = (string)btn.Tag == tag;
-                btn.Background = active ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : normalBackground;
-                btn.Foreground = active ? new SolidColorBrush(Color.FromRgb(0x1F, 0x23, 0x29)) : (Brush)FindResource("TextPrimaryBrush");
-                btn.BorderBrush = active ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("BorderBrush1");
+                btn.Background = active ? (Brush)FindResource("ActiveBrush") : normalBackground;
+                btn.Foreground = active ? Brushes.White : (Brush)FindResource("TextPrimaryBrush");
+                btn.BorderBrush = active ? (Brush)FindResource("ActiveBorderBrush") : (Brush)FindResource("BorderBrush1");
                 btn.BorderThickness = active ? new Thickness(2) : new Thickness(1);
             }
         }
@@ -474,7 +474,15 @@ namespace PicMark
         private void SetActiveFontButton(string tag)
         {
             foreach (var btn in new[] { FontSmallBtn, FontMidBtn, FontLargeBtn, FontHugeBtn, FontSmallPanelBtn, FontMidPanelBtn, FontLargePanelBtn, FontHugePanelBtn })
-                btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
+                SetChoiceButtonState(btn, (string)btn.Tag == tag);
+        }
+
+        private void SetChoiceButtonState(Button btn, bool active)
+        {
+            btn.Background = active ? (Brush)FindResource("ActiveBrush") : Brushes.Transparent;
+            btn.Foreground = active ? Brushes.White : (Brush)FindResource("TextPrimaryBrush");
+            btn.BorderBrush = active ? (Brush)FindResource("ActiveBorderBrush") : (Brush)FindResource("BorderBrush1");
+            btn.BorderThickness = active ? new Thickness(2) : new Thickness(1);
         }
 
         private void BtnUndo_Click(object sender, RoutedEventArgs e) => Canvas1.Undo();

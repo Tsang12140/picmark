@@ -239,7 +239,7 @@ namespace PicMark
                 Text,
                 CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                new Typeface(new FontFamily("Microsoft YaHei"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                new Typeface(new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
                 FontSize,
                 new SolidColorBrush(StrokeColor),
                 1.0);

@@ -2,13 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace PicMark
 {
-    public class AnnotationCanvas : FrameworkElement
+    public class AnnotationCanvas : Canvas
     {
         private BitmapSource _image;
         private double _scale = 1.0;
@@ -21,6 +23,7 @@ namespace PicMark
         private bool _editingTextWasNew;
         private string _editingOriginalText;
         private double _editingOriginalFontSize;
+        private TextBox _textEditor;
         private readonly UndoManager _undo = new UndoManager();
 
         public List<Annotation> Annotations { get; } = new List<Annotation>();
@@ -59,6 +62,7 @@ namespace PicMark
                 InvalidateMeasure();
                 InvalidateVisual();
                 ScaleChanged?.Invoke(this, EventArgs.Empty);
+                PositionTextEditor();
             }
         }
 
@@ -68,15 +72,22 @@ namespace PicMark
         {
             Focusable = true;
             ClipToBounds = true;
+            Background = Brushes.Transparent;
         }
 
         protected override Size MeasureOverride(Size availableSize)
         {
+            base.MeasureOverride(availableSize);
             if (Image == null) return new Size(0, 0);
             return new Size(Image.PixelWidth * Scale, Image.PixelHeight * Scale);
         }
 
-        protected override Size ArrangeOverride(Size finalSize) => finalSize;
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            PositionTextEditor();
+            base.ArrangeOverride(finalSize);
+            return finalSize;
+        }
 
         protected override void OnRender(DrawingContext dc)
         {
@@ -90,8 +101,10 @@ namespace PicMark
             dc.DrawImage(Image, new Rect(0, 0, Image.PixelWidth, Image.PixelHeight));
             foreach (var a in Annotations)
             {
-                if (ReferenceEquals(a, _editingText))
+                if (ReferenceEquals(a, _editingText) && _textEditor == null)
                     DrawEditingText(dc);
+                else if (ReferenceEquals(a, _editingText))
+                    continue;
                 else
                     a.Draw(dc, a == _selected, Image);
             }
@@ -136,6 +149,7 @@ namespace PicMark
                     break;
                 case AnnotationTool.Text:
                     BeginTextAnnotation(p);
+                    e.Handled = true;
                     break;
                 case AnnotationTool.Select:
                 default:
@@ -143,6 +157,7 @@ namespace PicMark
                     if (e.ClickCount == 2 && hit is TextAnnotation textHit)
                     {
                         BeginEditTextAnnotation(textHit);
+                        e.Handled = true;
                         break;
                     }
                     SetSelected(hit);
@@ -393,7 +408,7 @@ namespace PicMark
             _editingOriginalText = string.Empty;
             _editingOriginalFontSize = annotation.FontSize;
             SetSelected(annotation);
-            Focus();
+            ShowTextEditor();
             InvalidateVisual();
         }
 
@@ -405,15 +420,107 @@ namespace PicMark
             _editingOriginalText = annotation.Text;
             _editingOriginalFontSize = annotation.FontSize;
             SetSelected(annotation);
-            Focus();
+            ShowTextEditor();
             InvalidateVisual();
+        }
+
+        private void ShowTextEditor()
+        {
+            RemoveTextEditor();
+            if (_editingText == null) return;
+
+            _textEditor = new TextBox
+            {
+                Text = _editingText.Text,
+                FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei"),
+                FontWeight = FontWeights.Bold,
+                Foreground = new SolidColorBrush(_editingText.StrokeColor),
+                Background = new SolidColorBrush(Color.FromArgb(238, 255, 255, 255)),
+                BorderBrush = new SolidColorBrush(Color.FromRgb(82, 101, 255)),
+                BorderThickness = new Thickness(2),
+                Padding = new Thickness(8, 4, 8, 4),
+                AcceptsReturn = false,
+                TextWrapping = TextWrapping.NoWrap,
+                MinWidth = 140,
+                MinHeight = 34
+            };
+            _textEditor.TextChanged += TextEditor_TextChanged;
+            _textEditor.PreviewKeyDown += TextEditor_PreviewKeyDown;
+            _textEditor.LostKeyboardFocus += TextEditor_LostKeyboardFocus;
+            Children.Add(_textEditor);
+            PositionTextEditor();
+            Dispatcher.BeginInvoke((Action)(() =>
+            {
+                if (_textEditor == null) return;
+                _textEditor.Focus();
+                Keyboard.Focus(_textEditor);
+                _textEditor.CaretIndex = _textEditor.Text.Length;
+            }), DispatcherPriority.Input);
+        }
+
+        private void TextEditor_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (_editingText == null || _textEditor == null) return;
+            _editingText.Text = _textEditor.Text;
+            InvalidateVisual();
+            AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void TextEditor_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                CommitTextEdit();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                CancelTextEdit();
+                e.Handled = true;
+            }
+        }
+
+        private void TextEditor_LostKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)
+        {
+            Dispatcher.BeginInvoke((Action)(() =>
+            {
+                if (_textEditor != null && !_textEditor.IsKeyboardFocusWithin)
+                    CommitTextEdit();
+            }), DispatcherPriority.Background);
+        }
+
+        private void PositionTextEditor()
+        {
+            if (_textEditor == null || _editingText == null) return;
+            double scaledFontSize = Math.Max(12, _editingText.FontSize * Scale);
+            _textEditor.FontSize = scaledFontSize;
+            _textEditor.MinWidth = Math.Max(140, 240 * Scale);
+            _textEditor.MaxWidth = Image == null
+                ? 600
+                : Math.Max(180, (Image.PixelWidth - _editingText.Location.X) * Scale - 20);
+            SetLeft(_textEditor, _editingText.Location.X * Scale);
+            SetTop(_textEditor, _editingText.Location.Y * Scale);
+        }
+
+        private void RemoveTextEditor()
+        {
+            if (_textEditor == null) return;
+            _textEditor.TextChanged -= TextEditor_TextChanged;
+            _textEditor.PreviewKeyDown -= TextEditor_PreviewKeyDown;
+            _textEditor.LostKeyboardFocus -= TextEditor_LostKeyboardFocus;
+            Children.Remove(_textEditor);
+            _textEditor = null;
+            Focus();
         }
 
         private void CommitTextEdit()
         {
             if (_editingText == null) return;
+            if (_textEditor != null)
+                _editingText.Text = _textEditor.Text;
             if (string.IsNullOrWhiteSpace(_editingText.Text))
                 Annotations.Remove(_editingText);
+            RemoveTextEditor();
             _editingText = null;
             _editingTextWasNew = false;
             _editingOriginalText = null;
@@ -432,6 +539,7 @@ namespace PicMark
                 _editingText.Text = _editingOriginalText ?? string.Empty;
                 _editingText.FontSize = _editingOriginalFontSize;
             }
+            RemoveTextEditor();
             _editingText = null;
             _editingTextWasNew = false;
             _editingOriginalText = null;
@@ -451,7 +559,7 @@ namespace PicMark
                 displayText,
                 CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                new Typeface(new FontFamily("Microsoft YaHei"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                new Typeface(new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
                 _editingText.FontSize,
                 brush,
                 1.0);
@@ -472,6 +580,7 @@ namespace PicMark
             _editingText = null;
             _editingTextWasNew = false;
             _editingOriginalText = null;
+            RemoveTextEditor();
             _undo.Clear();
             InvalidateVisual();
         }
@@ -494,6 +603,8 @@ namespace PicMark
         {
             Annotations.Clear();
             Annotations.AddRange(state);
+            RemoveTextEditor();
+            _editingText = null;
             SetSelected(null);
             InvalidateVisual();
             AnnotationsChanged?.Invoke(this, EventArgs.Empty);
