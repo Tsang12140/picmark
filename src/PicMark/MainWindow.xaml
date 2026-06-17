@@ -348,6 +348,48 @@
                         <TextBlock Text="箭头" HorizontalAlignment="Center" Margin="0,3,0,0"/>
                     </StackPanel>
                 </Button>
+                <Popup x:Name="ArrowPopup" PlacementTarget="{Binding ElementName=BtnArrow}" Placement="Bottom"
+                       StaysOpen="False" AllowsTransparency="True">
+                    <Border Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="8">
+                        <StackPanel Orientation="Horizontal">
+                            <Button Style="{StaticResource ToolButton}" Width="72" Height="48" Tag="Filled" Click="ArrowStyle_Click" ToolTip="实心箭头">
+                                <Viewbox Width="48" Height="24">
+                                    <Canvas Width="80" Height="36">
+                                        <Path Fill="Red" Data="M 4 20 L 46 20 L 46 10 L 76 18 L 46 30 L 46 22 L 4 22 Z"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                            <Button Style="{StaticResource ToolButton}" Width="72" Height="48" Tag="Slim" Click="ArrowStyle_Click" ToolTip="细实心箭头">
+                                <Viewbox Width="48" Height="24">
+                                    <Canvas Width="80" Height="36">
+                                        <Line X1="5" Y1="24" X2="70" Y2="8" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Path Fill="Red" Data="M 70 8 L 52 6 L 58 22 Z"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                            <Button Style="{StaticResource ToolButton}" Width="72" Height="48" Tag="Line" Click="ArrowStyle_Click" ToolTip="线性箭头">
+                                <Viewbox Width="48" Height="24">
+                                    <Canvas Width="80" Height="36">
+                                        <Line X1="7" Y1="28" X2="70" Y2="8" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Line X1="70" Y1="8" X2="52" Y2="8" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Line X1="70" Y1="8" X2="62" Y2="24" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                            <Button Style="{StaticResource ToolButton}" Width="72" Height="48" Tag="Double" Click="ArrowStyle_Click" ToolTip="双向箭头">
+                                <Viewbox Width="48" Height="24">
+                                    <Canvas Width="80" Height="36">
+                                        <Line X1="12" Y1="28" X2="68" Y2="8" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Line X1="68" Y1="8" X2="51" Y2="8" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Line X1="68" Y1="8" X2="62" Y2="25" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Line X1="12" Y1="28" X2="29" Y2="28" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                        <Line X1="12" Y1="28" X2="18" Y2="11" Stroke="Red" StrokeThickness="5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Popup>
                 <Button x:Name="BtnFreehand" Style="{StaticResource ToolButton}" Tag="Freehand" Click="ToolButton_Click" ToolTip="画笔涂鸦">
                     <StackPanel>
                         <Viewbox Width="20" Height="20">

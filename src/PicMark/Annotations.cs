@@ -8,6 +8,14 @@ using System.Windows.Media.Imaging;
 
 namespace PicMark
 {
+    public enum ArrowStyle
+    {
+        Filled,
+        Slim,
+        Line,
+        Double
+    }
+
     public abstract class Annotation
     {
         public Color StrokeColor { get; set; } = Colors.Red;
@@ -67,38 +75,113 @@ namespace PicMark
     {
         public Point Start { get; set; }
         public Point End { get; set; }
+        public ArrowStyle Style { get; set; } = ArrowStyle.Filled;
 
         public override Rect GetBounds() => new Rect(Start, End);
 
         public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
         {
             var brush = new SolidColorBrush(StrokeColor);
-            var pen = new Pen(brush, Thickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
-            dc.DrawLine(pen, Start, End);
-
             var dir = End - Start;
             if (dir.Length > 0.001)
             {
                 dir.Normalize();
-                double headLength = Math.Max(14, Thickness * 3.2);
-                double headWidth = Math.Max(8, Thickness * 2.2);
-                var normal = new Vector(-dir.Y, dir.X);
-                var baseCenter = End - dir * headLength;
-                var p1 = baseCenter + normal * (headWidth / 2);
-                var p2 = baseCenter - normal * (headWidth / 2);
+                switch (Style)
+                {
+                    case ArrowStyle.Slim:
+                        DrawSlimArrow(dc, brush, dir);
+                        break;
+                    case ArrowStyle.Line:
+                        DrawLineArrow(dc, brush, dir, false);
+                        break;
+                    case ArrowStyle.Double:
+                        DrawLineArrow(dc, brush, dir, true);
+                        break;
+                    case ArrowStyle.Filled:
+                    default:
+                        DrawFilledArrow(dc, brush, dir);
+                        break;
+                }
+            }
 
+            if (selected) DrawSelectionAdorner(dc, GetBounds());
+        }
+
+        private void DrawFilledArrow(DrawingContext dc, Brush brush, Vector dir)
+        {
+            double length = (End - Start).Length;
+            double headLength = Math.Min(length * 0.55, Math.Max(24, Thickness * 5.5));
+            double headWidth = Math.Max(18, Thickness * 4.0);
+            double tailWidth = Math.Max(5, Thickness * 1.05);
+            var normal = new Vector(-dir.Y, dir.X);
+            var neck = End - dir * headLength;
+            var tailStartLeft = Start + normal * (tailWidth / 2);
+            var tailStartRight = Start - normal * (tailWidth / 2);
+            var neckLeft = neck + normal * (tailWidth / 2);
+            var neckRight = neck - normal * (tailWidth / 2);
+            var headLeft = neck + normal * (headWidth / 2);
+            var headRight = neck - normal * (headWidth / 2);
+
+            var geo = new StreamGeometry();
+            using (var ctx = geo.Open())
+            {
+                ctx.BeginFigure(tailStartLeft, true, true);
+                ctx.LineTo(neckLeft, true, true);
+                ctx.LineTo(headLeft, true, true);
+                ctx.LineTo(End, true, true);
+                ctx.LineTo(headRight, true, true);
+                ctx.LineTo(neckRight, true, true);
+                ctx.LineTo(tailStartRight, true, true);
+            }
+            geo.Freeze();
+            dc.DrawGeometry(brush, null, geo);
+        }
+
+        private void DrawSlimArrow(DrawingContext dc, Brush brush, Vector dir)
+        {
+            var pen = new Pen(brush, Math.Max(2, Thickness * 0.75)) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            dc.DrawLine(pen, Start, End);
+            DrawArrowHead(dc, brush, dir, Math.Max(15, Thickness * 3.4), Math.Max(10, Thickness * 2.4), true);
+        }
+
+        private void DrawLineArrow(DrawingContext dc, Brush brush, Vector dir, bool bothEnds)
+        {
+            var pen = new Pen(brush, Thickness) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+            dc.DrawLine(pen, Start, End);
+            DrawArrowHead(dc, brush, dir, Math.Max(14, Thickness * 3.2), Math.Max(8, Thickness * 2.2), false);
+            if (bothEnds)
+                DrawArrowHeadAt(dc, brush, Start, -dir, Math.Max(14, Thickness * 3.2), Math.Max(8, Thickness * 2.2), false);
+        }
+
+        private void DrawArrowHead(DrawingContext dc, Brush brush, Vector dir, double headLength, double headWidth, bool filled)
+        {
+            DrawArrowHeadAt(dc, brush, End, dir, headLength, headWidth, filled);
+        }
+
+        private static void DrawArrowHeadAt(DrawingContext dc, Brush brush, Point tip, Vector dir, double headLength, double headWidth, bool filled)
+        {
+            var normal = new Vector(-dir.Y, dir.X);
+            var baseCenter = tip - dir * headLength;
+            var p1 = baseCenter + normal * (headWidth / 2);
+            var p2 = baseCenter - normal * (headWidth / 2);
+            if (filled)
+            {
                 var geo = new StreamGeometry();
                 using (var ctx = geo.Open())
                 {
-                    ctx.BeginFigure(End, true, true);
+                    ctx.BeginFigure(tip, true, true);
                     ctx.LineTo(p1, true, true);
                     ctx.LineTo(p2, true, true);
                 }
                 geo.Freeze();
                 dc.DrawGeometry(brush, null, geo);
             }
-
-            if (selected) DrawSelectionAdorner(dc, GetBounds());
+            else
+            {
+                var pen = new Pen(brush, Math.Max(2, headWidth / 4)) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round };
+                dc.DrawLine(pen, tip, p1);
+                dc.DrawLine(pen, tip, p2);
+            }
         }
 
         public override void Move(Vector delta)
@@ -107,7 +190,7 @@ namespace PicMark
             End += delta;
         }
 
-        public override Annotation Clone() => new ArrowAnnotation { Start = Start, End = End, StrokeColor = StrokeColor, Thickness = Thickness };
+        public override Annotation Clone() => new ArrowAnnotation { Start = Start, End = End, StrokeColor = StrokeColor, Thickness = Thickness, Style = Style };
     }
 
     public class FreehandAnnotation : Annotation

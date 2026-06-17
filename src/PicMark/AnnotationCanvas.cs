@@ -31,6 +31,7 @@ namespace PicMark
         public Color CurrentColor { get; set; } = Colors.Red;
         public double CurrentThickness { get; set; } = 6;
         public double CurrentFontSize { get; set; } = 36;
+        public ArrowStyle CurrentArrowStyle { get; set; } = ArrowStyle.Filled;
 
         public event EventHandler AnnotationsChanged;
         public event EventHandler SelectionChanged;
@@ -134,7 +135,7 @@ namespace PicMark
                     break;
                 case AnnotationTool.Arrow:
                     _dragStartImagePoint = p;
-                    _drawing = new ArrowAnnotation { Start = p, End = p, StrokeColor = CurrentColor, Thickness = CurrentThickness };
+                    _drawing = new ArrowAnnotation { Start = p, End = p, StrokeColor = CurrentColor, Thickness = CurrentThickness, Style = CurrentArrowStyle };
                     CaptureMouse();
                     break;
                 case AnnotationTool.Freehand:

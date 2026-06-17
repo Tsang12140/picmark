@@ -39,6 +39,7 @@ namespace PicMark
             Canvas1.SelectionChanged += Canvas1_SelectionChanged;
             Canvas1.TextEditFinished += (s, e) => SetActiveTool("Select");
             Canvas1.ScaleChanged += (s, e) => UpdateZoomControls();
+            Canvas1.PreviewMouseLeftButtonDown += (s, e) => ArrowPopup.IsOpen = false;
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             Closing += MainWindow_Closing;
             Scroller.PreviewMouseWheel += Scroller_PreviewMouseWheel;
@@ -362,10 +363,26 @@ namespace PicMark
 
         private void ToolButton_Click(object sender, RoutedEventArgs e)
         {
-            var tag = (string)((Button)sender).Tag;
+            var button = (Button)sender;
+            var tag = (string)button.Tag;
             SetActiveTool(tag);
+            if (tag == "Arrow")
+            {
+                ArrowPopup.PlacementTarget = button == PanelBtnArrow ? PanelBtnArrow : BtnArrow;
+                ArrowPopup.IsOpen = true;
+            }
             if (tag == "Text")
                 UpdateStatus("点击图片上的位置，然后直接输入文字；按 Enter 完成。");
+        }
+
+        private void ArrowStyle_Click(object sender, RoutedEventArgs e)
+        {
+            var tag = (string)((Button)sender).Tag;
+            if (Enum.TryParse(tag, out ArrowStyle style))
+                Canvas1.CurrentArrowStyle = style;
+            SetActiveTool("Arrow");
+            ArrowPopup.IsOpen = false;
+            UpdateStatus("已选择箭头样式，直接在图片上拖动绘制。");
         }
 
         private void SetActiveTool(string tag)
@@ -609,9 +626,6 @@ namespace PicMark
 
             _hasUnsavedChanges = false;
             UpdateStatus(overwrite ? $"已保存（已覆盖原图）：{targetPath}" : $"已保存：{targetPath}（原图未改动）");
-            MessageBox.Show(this,
-                overwrite ? "已保存好啦，原图已被覆盖。" : $"已保存好啦：\n{targetPath}\n原图没有被改动。",
-                "保存成功", MessageBoxButton.OK, MessageBoxImage.Information);
             return true;
         }
 
