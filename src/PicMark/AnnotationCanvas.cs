@@ -27,6 +27,7 @@ namespace PicMark
         public event EventHandler AnnotationsChanged;
         public event Action<Point> TextToolClicked;
         public event Action<TextAnnotation> TextAnnotationDoubleClicked;
+        public event EventHandler SelectionChanged;
 
         public Annotation Selected => _selected;
         public bool IsTextSelected => _selected is TextAnnotation;
@@ -128,12 +129,11 @@ namespace PicMark
                     var hit = HitTest(p);
                     if (e.ClickCount == 2 && hit is TextAnnotation textHit)
                     {
-                        _selected = textHit;
-                        InvalidateVisual();
+                        SetSelected(textHit);
                         TextAnnotationDoubleClicked?.Invoke(textHit);
                         break;
                     }
-                    _selected = hit;
+                    SetSelected(hit);
                     if (hit != null)
                     {
                         _isMovingSelection = true;
@@ -141,7 +141,6 @@ namespace PicMark
                         _dragStartImagePoint = p;
                         CaptureMouse();
                     }
-                    InvalidateVisual();
                     break;
             }
         }
@@ -229,7 +228,7 @@ namespace PicMark
             }
             else if (e.Key == Key.Escape)
             {
-                _selected = null;
+                SetSelected(null);
                 InvalidateVisual();
             }
         }
@@ -239,7 +238,7 @@ namespace PicMark
             if (_selected == null) return;
             PushUndo();
             Annotations.Remove(_selected);
-            _selected = null;
+            SetSelected(null);
             InvalidateVisual();
             AnnotationsChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -247,7 +246,7 @@ namespace PicMark
         public void Deselect()
         {
             if (_selected == null) return;
-            _selected = null;
+            SetSelected(null);
             InvalidateVisual();
         }
 
@@ -278,11 +277,21 @@ namespace PicMark
             AnnotationsChanged?.Invoke(this, EventArgs.Empty);
         }
 
-        public void EditSelectedText(string newText)
+        public void SetSelectedFontSize(double fontSize)
+        {
+            if (!(_selected is TextAnnotation text)) return;
+            PushUndo();
+            text.FontSize = Math.Max(12, Math.Min(160, fontSize));
+            InvalidateVisual();
+            AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void EditSelectedText(string newText, double fontSize)
         {
             if (!(_selected is TextAnnotation text) || string.IsNullOrWhiteSpace(newText)) return;
             PushUndo();
             text.Text = newText;
+            text.FontSize = Math.Max(12, Math.Min(160, fontSize));
             InvalidateVisual();
             AnnotationsChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -298,25 +307,28 @@ namespace PicMark
             return null;
         }
 
-        public void AddTextAnnotation(Point imagePoint, string text)
+        public TextAnnotation AddTextAnnotation(Point imagePoint, string text)
         {
-            if (string.IsNullOrWhiteSpace(text)) return;
+            if (string.IsNullOrWhiteSpace(text)) return null;
             PushUndo();
-            Annotations.Add(new TextAnnotation
+            var annotation = new TextAnnotation
             {
                 Location = imagePoint,
                 Text = text,
                 StrokeColor = CurrentColor,
                 FontSize = CurrentFontSize
-            });
+            };
+            Annotations.Add(annotation);
+            SetSelected(annotation);
             InvalidateVisual();
             AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+            return annotation;
         }
 
         public void ClearAll()
         {
             Annotations.Clear();
-            _selected = null;
+            SetSelected(null);
             _drawing = null;
             _isMovingSelection = false;
             _selectionMoved = false;
@@ -342,9 +354,17 @@ namespace PicMark
         {
             Annotations.Clear();
             Annotations.AddRange(state);
-            _selected = null;
+            SetSelected(null);
             InvalidateVisual();
             AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void SetSelected(Annotation annotation)
+        {
+            if (ReferenceEquals(_selected, annotation)) return;
+            _selected = annotation;
+            InvalidateVisual();
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public RenderTargetBitmap RenderFullResolution()

@@ -30,12 +30,14 @@ namespace PicMark
             Canvas1.TextToolClicked += Canvas1_TextToolClicked;
             Canvas1.TextAnnotationDoubleClicked += Canvas1_TextAnnotationDoubleClicked;
             Canvas1.AnnotationsChanged += (s, e) => MarkDirty();
+            Canvas1.SelectionChanged += Canvas1_SelectionChanged;
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             Closing += MainWindow_Closing;
             Scroller.PreviewMouseWheel += Scroller_PreviewMouseWheel;
             SetActiveTool("Select");
             SetActiveColorButton("Red");
             SetActiveThicknessButton("6");
+            SetActiveFontButton("36");
         }
 
         public void OpenInitialFiles(IEnumerable<string> paths)
@@ -278,7 +280,7 @@ namespace PicMark
         {
             Canvas1.CurrentTool = (AnnotationTool)Enum.Parse(typeof(AnnotationTool), tag);
             foreach (var btn in new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText })
-                btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xBB, 0xDD, 0xFF)) : SystemColors.ControlBrush;
+                btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
         }
 
         private void Color_Click(object sender, RoutedEventArgs e)
@@ -322,7 +324,23 @@ namespace PicMark
         private void SetActiveThicknessButton(string tag)
         {
             foreach (var btn in new[] { ThinBtn, MidBtn, ThickBtn })
-                btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xBB, 0xDD, 0xFF)) : SystemColors.ControlBrush;
+                btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
+        }
+
+        private void FontSize_Click(object sender, RoutedEventArgs e)
+        {
+            var btn = (Button)sender;
+            var tag = (string)btn.Tag;
+            double fontSize = double.Parse(tag);
+            Canvas1.CurrentFontSize = fontSize;
+            SetActiveFontButton(tag);
+            if (Canvas1.IsTextSelected) Canvas1.SetSelectedFontSize(fontSize);
+        }
+
+        private void SetActiveFontButton(string tag)
+        {
+            foreach (var btn in new[] { FontSmallBtn, FontMidBtn, FontLargeBtn, FontHugeBtn })
+                btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
         }
 
         private void BtnUndo_Click(object sender, RoutedEventArgs e) => Canvas1.Undo();
@@ -334,19 +352,39 @@ namespace PicMark
 
         private void Canvas1_TextToolClicked(Point imagePoint)
         {
-            var dlg = new TextInputDialog { Owner = this };
+            var dlg = new TextInputDialog { Owner = this, InitialFontSize = Canvas1.CurrentFontSize };
             if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.ResultText))
             {
+                Canvas1.CurrentFontSize = dlg.ResultFontSize;
                 Canvas1.AddTextAnnotation(imagePoint, dlg.ResultText);
+                SetActiveFontButton(((int)dlg.ResultFontSize).ToString());
+                SetActiveTool("Select");
+                UpdateStatus("文字已添加。现在可以直接拖动，双击可继续编辑。");
             }
         }
 
         private void Canvas1_TextAnnotationDoubleClicked(TextAnnotation text)
         {
-            var dlg = new TextInputDialog { Owner = this, EditingExistingText = text.Text };
+            var dlg = new TextInputDialog { Owner = this, InitialFontSize = text.FontSize, EditingExistingText = text.Text };
             if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.ResultText))
             {
-                Canvas1.EditSelectedText(dlg.ResultText);
+                Canvas1.CurrentFontSize = dlg.ResultFontSize;
+                Canvas1.EditSelectedText(dlg.ResultText, dlg.ResultFontSize);
+                SetActiveFontButton(((int)dlg.ResultFontSize).ToString());
+            }
+        }
+
+        private void Canvas1_SelectionChanged(object sender, EventArgs e)
+        {
+            if (Canvas1.Selected is TextAnnotation text)
+            {
+                Canvas1.CurrentFontSize = text.FontSize;
+                SetActiveFontButton(((int)text.FontSize).ToString());
+                UpdateStatus("已选中文字。可直接拖动，双击编辑内容和字号。");
+            }
+            else if (Canvas1.HasSelection)
+            {
+                UpdateStatus("已选中标注。可拖动、改色、改粗细或按 Delete 删除。");
             }
         }
 
