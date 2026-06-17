@@ -23,20 +23,20 @@ namespace PicMark
         private readonly List<string> _batchFiles = new List<string>();
         private int _batchIndex = -1;
         private bool _hasUnsavedChanges;
+        private readonly AppSettings _settings;
 
         public MainWindow()
         {
             InitializeComponent();
+            _settings = AppSettings.Load();
+            ApplyWindowSettings();
             Canvas1.AnnotationsChanged += (s, e) => MarkDirty();
             Canvas1.SelectionChanged += Canvas1_SelectionChanged;
             Canvas1.TextEditFinished += (s, e) => SetActiveTool("Select");
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             Closing += MainWindow_Closing;
             Scroller.PreviewMouseWheel += Scroller_PreviewMouseWheel;
-            SetActiveTool("Select");
-            SetActiveColorButton("Red");
-            SetActiveThicknessButton("6");
-            SetActiveFontButton("36");
+            ApplyOptionSettings();
         }
 
         public void OpenInitialFiles(IEnumerable<string> paths)
@@ -85,9 +85,48 @@ namespace PicMark
             e.Handled = true;
         }
 
+        private void ApplyWindowSettings()
+        {
+            Width = Math.Max(900, _settings.WindowWidth);
+            Height = Math.Max(620, _settings.WindowHeight);
+            if (!double.IsNaN(_settings.WindowLeft) && !double.IsNaN(_settings.WindowTop))
+            {
+                WindowStartupLocation = WindowStartupLocation.Manual;
+                Left = _settings.WindowLeft;
+                Top = _settings.WindowTop;
+            }
+            if (_settings.WindowState == WindowState.Maximized)
+                WindowState = WindowState.Maximized;
+        }
+
+        private void ApplyOptionSettings()
+        {
+            string tool = Enum.TryParse(_settings.Tool, out AnnotationTool _) ? _settings.Tool : "Select";
+            string color = string.IsNullOrWhiteSpace(_settings.Color) ? "Red" : _settings.Color;
+            string thickness = new[] { "3", "6", "12" }.Contains(_settings.Thickness) ? _settings.Thickness : "6";
+            string fontSize = new[] { "24", "36", "52", "72" }.Contains(_settings.FontSize) ? _settings.FontSize : "36";
+
+            SetActiveTool(tool);
+            SetColorOption(color);
+            SetThicknessOption(thickness);
+            SetFontSizeOption(fontSize);
+        }
+
+        private void SaveWindowSettings()
+        {
+            var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
+            _settings.WindowLeft = bounds.Left;
+            _settings.WindowTop = bounds.Top;
+            _settings.WindowWidth = bounds.Width;
+            _settings.WindowHeight = bounds.Height;
+            _settings.WindowState = WindowState;
+            _settings.Save();
+        }
+
         private void MainWindow_Closing(object sender, CancelEventArgs e)
         {
             if (!ConfirmDiscardUnsavedChanges("关闭程序")) e.Cancel = true;
+            if (!e.Cancel) SaveWindowSettings();
         }
 
         private void Window_Drop(object sender, DragEventArgs e)
@@ -282,18 +321,34 @@ namespace PicMark
         private void SetActiveTool(string tag)
         {
             Canvas1.CurrentTool = (AnnotationTool)Enum.Parse(typeof(AnnotationTool), tag);
-            foreach (var btn in new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText, PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText })
-                btn.Background = (string)btn.Tag == tag ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : Brushes.Transparent;
+            SetToolButtonState(new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText }, tag, Brushes.Transparent);
+            SetToolButtonState(new[] { PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText }, tag, new SolidColorBrush(Color.FromRgb(0x42, 0x42, 0x42)));
+            _settings.Tool = tag;
         }
 
         private void Color_Click(object sender, RoutedEventArgs e)
         {
             var btn = (Button)sender;
-            var tag = (string)btn.Tag;
-            var color = (Color)ColorConverter.ConvertFromString(tag);
-            Canvas1.CurrentColor = color;
+            Color selectedColor = SetColorOption((string)btn.Tag);
+            if (Canvas1.HasSelection) Canvas1.SetSelectedColor(selectedColor);
+        }
+
+        private Color SetColorOption(string tag)
+        {
+            Color selectedColor;
+            try
+            {
+                selectedColor = (Color)ColorConverter.ConvertFromString(tag);
+            }
+            catch
+            {
+                tag = "Red";
+                selectedColor = Colors.Red;
+            }
+            Canvas1.CurrentColor = selectedColor;
             SetActiveColorButton(tag);
-            if (Canvas1.HasSelection) Canvas1.SetSelectedColor(color);
+            _settings.Color = tag;
+            return selectedColor;
         }
 
         private void SetActiveColorButton(string tag)
@@ -305,22 +360,30 @@ namespace PicMark
         private void Thickness_Click(object sender, RoutedEventArgs e)
         {
             var btn = (Button)sender;
-            var tag = (string)btn.Tag;
+            double thickness = SetThicknessOption((string)btn.Tag);
+            if (Canvas1.HasSelection) Canvas1.SetSelectedThickness(thickness);
+        }
+
+        private double SetThicknessOption(string tag)
+        {
             double thickness = double.Parse(tag);
             Canvas1.CurrentThickness = thickness;
             SetActiveThicknessButton(tag);
-            if (Canvas1.HasSelection) Canvas1.SetSelectedThickness(thickness);
+            _settings.Thickness = tag;
+            return thickness;
         }
 
         private void BtnFontSmaller_Click(object sender, RoutedEventArgs e)
         {
             Canvas1.CurrentFontSize = Math.Max(12, Canvas1.CurrentFontSize - 6);
+            _settings.FontSize = ((int)Canvas1.CurrentFontSize).ToString();
             if (Canvas1.IsTextSelected) Canvas1.AdjustSelectedFontSize(-6);
         }
 
         private void BtnFontBigger_Click(object sender, RoutedEventArgs e)
         {
             Canvas1.CurrentFontSize = Math.Min(160, Canvas1.CurrentFontSize + 6);
+            _settings.FontSize = ((int)Canvas1.CurrentFontSize).ToString();
             if (Canvas1.IsTextSelected) Canvas1.AdjustSelectedFontSize(6);
         }
 
@@ -333,11 +396,29 @@ namespace PicMark
         private void FontSize_Click(object sender, RoutedEventArgs e)
         {
             var btn = (Button)sender;
-            var tag = (string)btn.Tag;
+            double fontSize = SetFontSizeOption((string)btn.Tag);
+            if (Canvas1.IsTextSelected) Canvas1.SetSelectedFontSize(fontSize);
+        }
+
+        private double SetFontSizeOption(string tag)
+        {
             double fontSize = double.Parse(tag);
             Canvas1.CurrentFontSize = fontSize;
             SetActiveFontButton(tag);
-            if (Canvas1.IsTextSelected) Canvas1.SetSelectedFontSize(fontSize);
+            _settings.FontSize = tag;
+            return fontSize;
+        }
+
+        private void SetToolButtonState(IEnumerable<Button> buttons, string tag, Brush normalBackground)
+        {
+            foreach (var btn in buttons)
+            {
+                bool active = (string)btn.Tag == tag;
+                btn.Background = active ? new SolidColorBrush(Color.FromRgb(0xE6, 0xF4, 0xEA)) : normalBackground;
+                btn.Foreground = active ? new SolidColorBrush(Color.FromRgb(0x1F, 0x23, 0x29)) : (Brush)FindResource("TextPrimaryBrush");
+                btn.BorderBrush = active ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("BorderBrush1");
+                btn.BorderThickness = active ? new Thickness(2) : new Thickness(1);
+            }
         }
 
         private void SetActiveFontButton(string tag)

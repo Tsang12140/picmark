@@ -1,0 +1,88 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Windows;
+
+namespace PicMark
+{
+    public class AppSettings
+    {
+        private static readonly string SettingsPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "PicMark",
+            "settings.txt");
+
+        public double WindowLeft { get; set; } = double.NaN;
+        public double WindowTop { get; set; } = double.NaN;
+        public double WindowWidth { get; set; } = 1280;
+        public double WindowHeight { get; set; } = 840;
+        public WindowState WindowState { get; set; } = WindowState.Normal;
+        public string Tool { get; set; } = "Select";
+        public string Color { get; set; } = "Red";
+        public string Thickness { get; set; } = "6";
+        public string FontSize { get; set; } = "36";
+
+        public static AppSettings Load()
+        {
+            var settings = new AppSettings();
+            if (!File.Exists(SettingsPath)) return settings;
+
+            foreach (var line in File.ReadAllLines(SettingsPath))
+            {
+                int split = line.IndexOf('=');
+                if (split <= 0) continue;
+                string key = line.Substring(0, split);
+                string value = line.Substring(split + 1);
+                settings.SetValue(key, value);
+            }
+            return settings;
+        }
+
+        public void Save()
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
+            var lines = new[]
+            {
+                "WindowLeft=" + FormatDouble(WindowLeft),
+                "WindowTop=" + FormatDouble(WindowTop),
+                "WindowWidth=" + FormatDouble(WindowWidth),
+                "WindowHeight=" + FormatDouble(WindowHeight),
+                "WindowState=" + WindowState,
+                "Tool=" + Tool,
+                "Color=" + Color,
+                "Thickness=" + Thickness,
+                "FontSize=" + FontSize
+            };
+            File.WriteAllLines(SettingsPath, lines);
+        }
+
+        private void SetValue(string key, string value)
+        {
+            switch (key)
+            {
+                case "WindowLeft": WindowLeft = ParseDouble(value, WindowLeft); break;
+                case "WindowTop": WindowTop = ParseDouble(value, WindowTop); break;
+                case "WindowWidth": WindowWidth = ParseDouble(value, WindowWidth); break;
+                case "WindowHeight": WindowHeight = ParseDouble(value, WindowHeight); break;
+                case "WindowState":
+                    if (Enum.TryParse(value, out WindowState state)) WindowState = state;
+                    break;
+                case "Tool": Tool = value; break;
+                case "Color": Color = value; break;
+                case "Thickness": Thickness = value; break;
+                case "FontSize": FontSize = value; break;
+            }
+        }
+
+        private static string FormatDouble(double value) =>
+            value.ToString(CultureInfo.InvariantCulture);
+
+        private static double ParseDouble(string value, double fallback)
+        {
+            return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)
+                ? parsed
+                : fallback;
+        }
+    }
+}

@@ -97,6 +97,7 @@
     <Compile Include="UndoManager.cs" />
     <Compile Include="AnnotationTool.cs" />
     <Compile Include="WebpDecoder.cs" />
+    <Compile Include="AppSettings.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
     </Compile>
