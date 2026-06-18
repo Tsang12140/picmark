@@ -37,6 +37,15 @@ namespace PicMark
         private double _panStartHorizontalOffset;
         private double _panStartVerticalOffset;
         private readonly DispatcherTimer _shapeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
+        private bool _initializingWatermarkUi = true;
+        private WatermarkStyle _watermarkStyle = WatermarkStyle.DiamondGrid;
+        private WatermarkLayout _watermarkLayout = WatermarkLayout.Tiled;
+        private bool _watermarkBold;
+        private Color _watermarkColor = Colors.Black;
+        private string _watermarkFontFamily = "Microsoft YaHei UI";
+        private bool _snappingWatermarkSlider;
+        private bool _syncingWatermarkFromCanvas;
+        private bool _hasSelectedWatermarkTemplate;
 
         public MainWindow()
         {
@@ -55,6 +64,7 @@ namespace PicMark
             Canvas1.SelectionChanged += Canvas1_SelectionChanged;
             Canvas1.TextEditFinished += (s, e) => SetActiveTool("Select");
             Canvas1.ScaleChanged += (s, e) => UpdateZoomControls();
+            Canvas1.WatermarkChanged += Canvas1_WatermarkChanged;
             Canvas1.PreviewMouseLeftButtonDown += (s, e) =>
             {
                 ArrowPopup.IsOpen = false;
@@ -71,6 +81,9 @@ namespace PicMark
             Scroller.PreviewMouseLeftButtonUp += Scroller_PreviewMouseLeftButtonUp;
             _shapeHintTimer.Tick += ShapeHintTimer_Tick;
             ApplyOptionSettings();
+            WatermarkTextBox.Text = BuildCertificateWatermarkText();
+            _initializingWatermarkUi = false;
+            UpdateWatermarkControls();
             HistoryCacheText.Text = _settings.HistoryCacheMb.ToString();
             UpdateHistoryCacheInfo();
             SetMosaicMode(MosaicMode.Pixelate);
@@ -560,6 +573,196 @@ namespace PicMark
                 UpdateStatus("点击图片上的位置，然后直接输入文字；按 Enter 完成。");
         }
 
+        private void BtnWatermark_Click(object sender, RoutedEventArgs e)
+        {
+            if (Canvas1.Image == null)
+            {
+                AppDialog.Show(this, "请先打开一张图片，再添加满屏水印。", "提示");
+                return;
+            }
+
+            WatermarkPanel.Visibility = Visibility.Visible;
+            SetActiveTool("Select");
+            UpdateStatus("请选择一种水印样式；选中后会展开调节参数。");
+        }
+
+        private void BtnCloseWatermarkPanel_Click(object sender, RoutedEventArgs e) =>
+            WatermarkPanel.Visibility = Visibility.Collapsed;
+
+        private static string BuildCertificateWatermarkText() =>
+            $"本证件/文件仅用于XX\n挪作他用无效 {DateTime.Now:yyyy年M月d日}";
+
+        private void WatermarkTemplate_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Button button)) return;
+            string template = button.Tag as string;
+            _hasSelectedWatermarkTemplate = true;
+            WatermarkParametersPanel.Visibility = Visibility.Visible;
+            _initializingWatermarkUi = true;
+            switch (template)
+            {
+                case "TiledText":
+                    _watermarkStyle = WatermarkStyle.TextOnly;
+                    _watermarkLayout = WatermarkLayout.Tiled;
+                    WatermarkAngleSlider.Value = -25;
+                    break;
+                case "SingleText":
+                    _watermarkStyle = WatermarkStyle.TextOnly;
+                    _watermarkLayout = WatermarkLayout.Single;
+                    WatermarkAngleSlider.Value = 0;
+                    WatermarkOffsetSlider.Value = 0;
+                    break;
+                default:
+                    _watermarkStyle = WatermarkStyle.DiamondGrid;
+                    _watermarkLayout = WatermarkLayout.Tiled;
+                    WatermarkTextBox.Text = BuildCertificateWatermarkText();
+                    WatermarkAngleSlider.Value = 0;
+                    break;
+            }
+            _initializingWatermarkUi = false;
+            UpdateWatermarkControls();
+            ApplyWatermarkFromControls(true);
+        }
+
+        private void WatermarkFont_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Button button) || !(button.Tag is string font)) return;
+            _watermarkFontFamily = font;
+            UpdateWatermarkControls();
+            ApplyWatermarkFromControls();
+        }
+
+        private void WatermarkBold_Click(object sender, RoutedEventArgs e)
+        {
+            _watermarkBold = !_watermarkBold;
+            UpdateWatermarkControls();
+            ApplyWatermarkFromControls();
+        }
+
+        private void WatermarkColor_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Button button)) return;
+            switch (button.Tag as string)
+            {
+                case "White": _watermarkColor = Colors.White; break;
+                case "Red": _watermarkColor = Color.FromRgb(0xEA, 0x43, 0x35); break;
+                case "Teal": _watermarkColor = Color.FromRgb(0x5C, 0x8D, 0x89); break;
+                default: _watermarkColor = Colors.Black; break;
+            }
+            ApplyWatermarkFromControls();
+        }
+
+        private void WatermarkOption_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_initializingWatermarkUi) return;
+            if (!_snappingWatermarkSlider && sender is Slider slider)
+            {
+                double snapRange = slider == WatermarkAngleSlider ? 3 : slider == WatermarkOffsetSlider ? 8 : 0;
+                if (snapRange > 0 && Math.Abs(slider.Value) <= snapRange && Math.Abs(slider.Value) > 0.001)
+                {
+                    _snappingWatermarkSlider = true;
+                    slider.Value = 0;
+                    _snappingWatermarkSlider = false;
+                }
+            }
+            UpdateWatermarkControls();
+            ApplyWatermarkFromControls();
+        }
+
+        private void ApplyWatermarkFromControls(bool resetSinglePosition = false)
+        {
+            if (_initializingWatermarkUi || !_hasSelectedWatermarkTemplate || Canvas1 == null || Canvas1.Image == null) return;
+            var current = Canvas1.GetWatermark();
+            Canvas1.SetWatermark(new WatermarkSettings
+            {
+                Enabled = true,
+                Text = WatermarkTextBox.Text,
+                Style = _watermarkLayout == WatermarkLayout.Single ? WatermarkStyle.TextOnly : _watermarkStyle,
+                Layout = _watermarkLayout,
+                Opacity = WatermarkOpacitySlider.Value / 100.0,
+                FontSize = WatermarkFontSizeSlider.Value,
+                FontFamilyName = _watermarkFontFamily,
+                Bold = _watermarkBold,
+                Angle = WatermarkAngleSlider.Value,
+                Spacing = WatermarkSpacingSlider.Value,
+                HorizontalOffset = WatermarkOffsetSlider.Value,
+                VerticalOffset = resetSinglePosition ? 0 : current?.VerticalOffset ?? 0,
+                Color = _watermarkColor
+            });
+        }
+
+        private void Canvas1_WatermarkChanged(object sender, EventArgs e)
+        {
+            if (_syncingWatermarkFromCanvas) return;
+            var watermark = Canvas1.GetWatermark();
+            if (watermark == null) return;
+            _syncingWatermarkFromCanvas = true;
+            _initializingWatermarkUi = true;
+            WatermarkOffsetSlider.Value = Math.Max(WatermarkOffsetSlider.Minimum,
+                Math.Min(WatermarkOffsetSlider.Maximum, watermark.HorizontalOffset));
+            _initializingWatermarkUi = false;
+            _syncingWatermarkFromCanvas = false;
+            UpdateWatermarkControls();
+        }
+
+        private void UpdateWatermarkControls()
+        {
+            if (WatermarkOpacityValue == null) return;
+            WatermarkOpacityValue.Text = $"{WatermarkOpacitySlider.Value:0}%";
+            WatermarkFontSizeValue.Text = $"{WatermarkFontSizeSlider.Value:0}px";
+            WatermarkAngleValue.Text = $"{WatermarkAngleSlider.Value:+0;-0;0}°";
+            WatermarkSpacingValue.Text = $"{WatermarkSpacingSlider.Value:0}px";
+            WatermarkOffsetValue.Text = $"{WatermarkOffsetSlider.Value:+0;-0;0}px";
+            SetChoiceButtonState(WatermarkGridCard, _hasSelectedWatermarkTemplate && _watermarkStyle == WatermarkStyle.DiamondGrid);
+            SetChoiceButtonState(WatermarkTiledCard, _hasSelectedWatermarkTemplate && _watermarkStyle == WatermarkStyle.TextOnly && _watermarkLayout == WatermarkLayout.Tiled);
+            SetChoiceButtonState(WatermarkSingleCard, _hasSelectedWatermarkTemplate && _watermarkLayout == WatermarkLayout.Single);
+            SetChoiceButtonState(WatermarkBoldBtn, _watermarkBold);
+            SetChoiceButtonState(WatermarkFontYaHeiBtn, _watermarkFontFamily == "Microsoft YaHei UI");
+            SetChoiceButtonState(WatermarkFontSimSunBtn, _watermarkFontFamily == "SimSun");
+            SetChoiceButtonState(WatermarkFontSimHeiBtn, _watermarkFontFamily == "SimHei");
+            SetChoiceButtonState(WatermarkFontKaiTiBtn, _watermarkFontFamily == "KaiTi");
+            bool single = _watermarkLayout == WatermarkLayout.Single;
+            WatermarkSpacingHeader.Visibility = single ? Visibility.Collapsed : Visibility.Visible;
+            WatermarkSpacingSlider.Visibility = single ? Visibility.Collapsed : Visibility.Visible;
+            SingleWatermarkHint.Visibility = single ? Visibility.Visible : Visibility.Collapsed;
+            ResetSinglePositionBtn.Visibility = single ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void WatermarkReset_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Button button)) return;
+            switch (button.Tag as string)
+            {
+                case "FontSize": WatermarkFontSizeSlider.Value = 28; break;
+                case "Opacity": WatermarkOpacitySlider.Value = 20; break;
+                case "Angle": WatermarkAngleSlider.Value = 0; break;
+                case "Spacing": WatermarkSpacingSlider.Value = 204; break;
+                case "Offset": WatermarkOffsetSlider.Value = 0; break;
+            }
+        }
+
+        private void ResetSinglePosition_Click(object sender, RoutedEventArgs e)
+        {
+            WatermarkOffsetSlider.Value = 0;
+            var current = Canvas1.GetWatermark();
+            if (current == null) return;
+            current.HorizontalOffset = 0;
+            current.VerticalOffset = 0;
+            Canvas1.SetWatermark(current);
+        }
+
+        private void BtnRemoveWatermark_Click(object sender, RoutedEventArgs e)
+        {
+            if (Canvas1.Image == null) return;
+            _initializingWatermarkUi = true;
+            _hasSelectedWatermarkTemplate = false;
+            _initializingWatermarkUi = false;
+            Canvas1.SetWatermark(null);
+            WatermarkParametersPanel.Visibility = Visibility.Collapsed;
+            UpdateWatermarkControls();
+            UpdateStatus("已移除满屏水印。");
+        }
+
         private void ArrowStyle_Click(object sender, RoutedEventArgs e)
         {
             var tag = (string)((Button)sender).Tag;
@@ -893,6 +1096,15 @@ namespace PicMark
             if (_currentFilePath == null)
             {
                 AppDialog.Show(this, "这张图片还没有对应的原文件路径（比如是粘贴来的截图），无法覆盖，请用“保存”另存为新文件。", "提示");
+                return;
+            }
+            if (Canvas1.HasWatermark)
+            {
+                var choice = WatermarkOverwriteDialog.Show(this);
+                if (choice == WatermarkOverwriteChoice.SaveAs)
+                    SaveAnnotatedImage(false);
+                else if (choice == WatermarkOverwriteChoice.Overwrite)
+                    SaveAnnotatedImage(true);
                 return;
             }
             var result = AppDialog.Show(this, "确定要覆盖原图吗？原图将被替换，无法恢复。",

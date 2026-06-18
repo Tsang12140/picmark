@@ -29,6 +29,9 @@ namespace PicMark
         private readonly UndoManager _undo = new UndoManager();
         private readonly DispatcherTimer _beautifyTimer;
         private DateTime _lastFreehandStrokeAt;
+        private WatermarkSettings _watermark;
+        private bool _isMovingSingleWatermark;
+        private Point _watermarkDragStartImagePoint;
 
         // Win7 兼容：缓存渲染画笔，避免高频 OnRender 中每帧分配
         private SolidColorBrush _cacheBackgroundBrush;
@@ -48,9 +51,14 @@ namespace PicMark
         public event EventHandler SelectionChanged;
         public event EventHandler TextEditFinished;
         public event EventHandler ScaleChanged;
+        public event EventHandler WatermarkChanged;
 
         public Annotation Selected => _selected;
         public bool IsTextSelected => _selected is TextAnnotation;
+        public bool HasWatermark =>
+            _watermark != null &&
+            _watermark.Enabled &&
+            !string.IsNullOrWhiteSpace(_watermark.Text);
 
         public BitmapSource Image
         {
@@ -153,6 +161,7 @@ namespace PicMark
                         a.Draw(dc, a == _selected, Image);
                 }
                 _drawing?.Draw(dc, false, Image);
+                _watermark?.Draw(dc, Image);
             }
             finally
             {
@@ -171,6 +180,18 @@ namespace PicMark
             if (Image == null) return;
             Focus();
             var p = ToImagePoint(e.GetPosition(this));
+
+            if (CurrentTool == AnnotationTool.Select &&
+                _watermark != null &&
+                _watermark.Layout == WatermarkLayout.Single &&
+                _watermark.HitTestSingle(p, Image))
+            {
+                _isMovingSingleWatermark = true;
+                _watermarkDragStartImagePoint = p;
+                CaptureMouse();
+                e.Handled = true;
+                return;
+            }
 
             switch (CurrentTool)
             {
@@ -269,6 +290,15 @@ namespace PicMark
                 _dragStartImagePoint = p;
                 InvalidateVisual();
             }
+            else if (_isMovingSingleWatermark && _watermark != null)
+            {
+                Vector delta = p - _watermarkDragStartImagePoint;
+                _watermark.HorizontalOffset += delta.X;
+                _watermark.VerticalOffset += delta.Y;
+                _watermarkDragStartImagePoint = p;
+                InvalidateVisual();
+                WatermarkChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
 
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -296,6 +326,13 @@ namespace PicMark
                 _selectionMoved = false;
                 ReleaseMouseCapture();
                 if (moved) AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+            }
+            else if (_isMovingSingleWatermark)
+            {
+                _isMovingSingleWatermark = false;
+                ReleaseMouseCapture();
+                AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+                WatermarkChanged?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -784,6 +821,8 @@ namespace PicMark
         {
             _beautifyTimer.Stop();
             Annotations.Clear();
+            _watermark = null;
+            _isMovingSingleWatermark = false;
             SetSelected(null);
             _drawing = null;
             _isMovingSelection = false;
@@ -795,6 +834,17 @@ namespace PicMark
             _undo.Clear();
             InvalidateVisual();
         }
+
+        public void SetWatermark(WatermarkSettings settings, bool notifyChanged = true)
+        {
+            _watermark = settings?.Clone();
+            InvalidateVisual();
+            WatermarkChanged?.Invoke(this, EventArgs.Empty);
+            if (notifyChanged)
+                AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public WatermarkSettings GetWatermark() => _watermark?.Clone();
 
         private void PushUndo() => _undo.PushState(Annotations);
 
@@ -839,6 +889,7 @@ namespace PicMark
                 var snapshot = Annotations.ToArray();
                 foreach (var a in snapshot)
                     a.Draw(dc, false, Image);
+                _watermark?.Draw(dc, Image);
             }
             var rtb = new RenderTargetBitmap(Image.PixelWidth, Image.PixelHeight, 96, 96, PixelFormats.Pbgra32);
             rtb.Render(visual);

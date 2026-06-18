@@ -80,6 +80,8 @@
     </Compile>
     <Compile Include="AppDialog.cs" />
     <Compile Include="Win7Helper.cs" />
+    <Compile Include="WatermarkOverwriteDialog.cs" />
+    <Compile Include="WatermarkSettings.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
