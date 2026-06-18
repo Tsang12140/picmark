@@ -12,6 +12,8 @@ namespace PicMark
 {
     public class AnnotationCanvas : Canvas
     {
+        private const string DefaultFontFamily = "Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, sans-serif";
+
         private BitmapSource _image;
         private double _scale = 1.0;
         private Annotation _selected;
@@ -25,13 +27,22 @@ namespace PicMark
         private double _editingOriginalFontSize;
         private TextBox _textEditor;
         private readonly UndoManager _undo = new UndoManager();
+        private readonly DispatcherTimer _beautifyTimer;
+        private DateTime _lastFreehandStrokeAt;
+
+        // Win7 兼容：缓存渲染画笔，避免高频 OnRender 中每帧分配
+        private SolidColorBrush _cacheBackgroundBrush;
+        private SolidColorBrush _cacheEditingBgBrush;
+        private Pen _cacheEditingPen;
 
         public List<Annotation> Annotations { get; } = new List<Annotation>();
         public AnnotationTool CurrentTool { get; set; } = AnnotationTool.Select;
         public Color CurrentColor { get; set; } = Colors.Red;
-        public double CurrentThickness { get; set; } = 6;
+        public double CurrentThickness { get; set; } = 9;
         public double CurrentFontSize { get; set; } = 36;
         public ArrowStyle CurrentArrowStyle { get; set; } = ArrowStyle.Filled;
+        public MosaicMode CurrentMosaicMode { get; set; } = MosaicMode.Pixelate;
+        public int CurrentMosaicStrength { get; set; } = 18;
 
         public event EventHandler AnnotationsChanged;
         public event EventHandler SelectionChanged;
@@ -76,6 +87,17 @@ namespace PicMark
             Focusable = true;
             ClipToBounds = true;
             Background = Brushes.Transparent;
+            _beautifyTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+            _beautifyTimer.Tick += BeautifyTimer_Tick;
+            Unloaded += OnUnloaded;
+        }
+
+        private void OnUnloaded(object sender, RoutedEventArgs e)
+        {
+            _beautifyTimer.Stop();
+            _beautifyTimer.Tick -= BeautifyTimer_Tick;
+            RemoveTextEditor();
+            Unloaded -= OnUnloaded;
         }
 
         private void UpdateDisplaySize()
@@ -109,26 +131,40 @@ namespace PicMark
         {
             if (Image == null)
             {
-                dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77)), null, new Rect(RenderSize));
+                if (_cacheBackgroundBrush == null)
+                    _cacheBackgroundBrush = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77));
+                dc.DrawRectangle(_cacheBackgroundBrush, null, new Rect(RenderSize));
                 return;
             }
 
             dc.PushTransform(new ScaleTransform(Scale, Scale));
-            dc.DrawImage(Image, new Rect(0, 0, Image.PixelWidth, Image.PixelHeight));
-            foreach (var a in Annotations)
+            try
             {
-                if (ReferenceEquals(a, _editingText) && _textEditor == null)
-                    DrawEditingText(dc);
-                else if (ReferenceEquals(a, _editingText))
-                    continue;
-                else
-                    a.Draw(dc, a == _selected, Image);
+                dc.DrawImage(Image, new Rect(0, 0, Image.PixelWidth, Image.PixelHeight));
+                // 快照避免渲染过程中 Annotations 被事件处理器修改
+                var snapshot = Annotations.ToArray();
+                foreach (var a in snapshot)
+                {
+                    if (ReferenceEquals(a, _editingText) && _textEditor == null)
+                        DrawEditingText(dc);
+                    else if (ReferenceEquals(a, _editingText))
+                        continue;
+                    else
+                        a.Draw(dc, a == _selected, Image);
+                }
+                _drawing?.Draw(dc, false, Image);
             }
-            _drawing?.Draw(dc, false, Image);
-            dc.Pop();
+            finally
+            {
+                dc.Pop();
+            }
         }
 
-        private Point ToImagePoint(Point screenPoint) => new Point(screenPoint.X / Scale, screenPoint.Y / Scale);
+        private Point ToImagePoint(Point screenPoint)
+        {
+            if (_scale <= 0) return new Point(0, 0);
+            return new Point(screenPoint.X / Scale, screenPoint.Y / Scale);
+        }
 
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
@@ -141,27 +177,29 @@ namespace PicMark
                 case AnnotationTool.Rectangle:
                     _dragStartImagePoint = p;
                     _drawing = new RectAnnotation { Bounds = new Rect(p, p), StrokeColor = CurrentColor, Thickness = CurrentThickness };
-                    CaptureMouse();
+                    if (!CaptureMouse()) { _drawing = null; }
                     break;
                 case AnnotationTool.Ellipse:
                     _dragStartImagePoint = p;
                     _drawing = new EllipseAnnotation { Bounds = new Rect(p, p), StrokeColor = CurrentColor, Thickness = CurrentThickness };
-                    CaptureMouse();
+                    if (!CaptureMouse()) { _drawing = null; }
                     break;
                 case AnnotationTool.Arrow:
                     _dragStartImagePoint = p;
                     _drawing = new ArrowAnnotation { Start = p, End = p, StrokeColor = CurrentColor, Thickness = CurrentThickness, Style = CurrentArrowStyle };
-                    CaptureMouse();
+                    if (!CaptureMouse()) { _drawing = null; }
                     break;
                 case AnnotationTool.Freehand:
+                    _dragStartImagePoint = p;
                     _drawing = new FreehandAnnotation { StrokeColor = CurrentColor, Thickness = CurrentThickness };
                     ((FreehandAnnotation)_drawing).Points.Add(p);
-                    CaptureMouse();
+                    StartBeautifyWatch();
+                    if (!CaptureMouse()) { _drawing = null; _beautifyTimer.Stop(); }
                     break;
                 case AnnotationTool.Mosaic:
                     _dragStartImagePoint = p;
-                    _drawing = new MosaicAnnotation { Bounds = new Rect(p, p) };
-                    CaptureMouse();
+                    _drawing = new MosaicAnnotation { Bounds = new Rect(p, p), Mode = CurrentMosaicMode, BlockSize = CurrentMosaicStrength };
+                    if (!CaptureMouse()) { _drawing = null; }
                     break;
                 case AnnotationTool.Text:
                     BeginTextAnnotation(p);
@@ -182,7 +220,7 @@ namespace PicMark
                         _isMovingSelection = true;
                         _selectionMoved = false;
                         _dragStartImagePoint = p;
-                        CaptureMouse();
+                        if (!CaptureMouse()) { _isMovingSelection = false; }
                     }
                     break;
             }
@@ -200,7 +238,9 @@ namespace PicMark
             }
             else if (_drawing is EllipseAnnotation el)
             {
-                el.Bounds = new Rect(_dragStartImagePoint, p);
+                el.Bounds = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)
+                    ? BuildSquareRect(_dragStartImagePoint, p)
+                    : new Rect(_dragStartImagePoint, p);
                 InvalidateVisual();
             }
             else if (_drawing is MosaicAnnotation mo)
@@ -215,7 +255,7 @@ namespace PicMark
             }
             else if (_drawing is FreehandAnnotation fh)
             {
-                fh.Points.Add(p);
+                AddFreehandPoint(fh, p);
                 InvalidateVisual();
             }
             else if (_isMovingSelection && _selected != null)
@@ -235,6 +275,9 @@ namespace PicMark
         {
             if (_drawing != null)
             {
+                if (_drawing is FreehandAnnotation upFreehand && IsFreehandIdleLongEnough())
+                    _drawing = TryCreateBeautifiedShape(upFreehand) ?? _drawing;
+                _beautifyTimer.Stop();
                 ReleaseMouseCapture();
                 if (IsDrawingValid(_drawing))
                 {
@@ -247,12 +290,156 @@ namespace PicMark
             }
             else if (_isMovingSelection)
             {
+                _beautifyTimer.Stop();
                 _isMovingSelection = false;
                 bool moved = _selectionMoved;
                 _selectionMoved = false;
                 ReleaseMouseCapture();
                 if (moved) AnnotationsChanged?.Invoke(this, EventArgs.Empty);
             }
+        }
+
+        private void StartBeautifyWatch()
+        {
+            _lastFreehandStrokeAt = DateTime.UtcNow;
+            _beautifyTimer.Start();
+        }
+
+        private void AddFreehandPoint(FreehandAnnotation freehand, Point point)
+        {
+            if (freehand.Points.Count == 0)
+            {
+                freehand.Points.Add(point);
+                _lastFreehandStrokeAt = DateTime.UtcNow;
+                return;
+            }
+
+            Point last = freehand.Points[freehand.Points.Count - 1];
+            if ((point - last).Length < Math.Max(0.8, CurrentThickness * 0.08)) return;
+
+            freehand.Points.Add(point);
+            _lastFreehandStrokeAt = DateTime.UtcNow;
+        }
+
+        private void BeautifyTimer_Tick(object sender, EventArgs e)
+        {
+            if (!IsMouseCaptured || !(_drawing is FreehandAnnotation freehand)) return;
+            if (!IsFreehandIdleLongEnough()) return;
+
+            Annotation beautified = TryCreateBeautifiedShape(freehand);
+            if (beautified == null) return;
+
+            _beautifyTimer.Stop();
+            _drawing = beautified;
+            InvalidateVisual();
+        }
+
+        private bool IsFreehandIdleLongEnough() =>
+            (DateTime.UtcNow - _lastFreehandStrokeAt).TotalMilliseconds >= 1050;
+
+        private Annotation TryCreateBeautifiedShape(FreehandAnnotation freehand)
+        {
+            if (freehand.Points.Count < 8) return null;
+
+            Rect bounds = NormalizeRect(freehand.GetBounds());
+            if (bounds.Width < 12 || bounds.Height < 12) return null;
+
+            Point first = freehand.Points[0];
+            Point last = freehand.Points[freehand.Points.Count - 1];
+            double diagonal = Math.Sqrt(bounds.Width * bounds.Width + bounds.Height * bounds.Height);
+            double closeDistance = (last - first).Length;
+            double pathLength = GetPathLength(freehand.Points);
+            double directLength = closeDistance;
+
+            if (closeDistance <= diagonal * 0.28)
+            {
+                // 用"画出来的实际面积 / 包围盒面积"判断是圆/椭圆还是矩形，
+                // 而不是用宽高比——否则细长的椭圆会因为宽高比超出范围被误判成矩形。
+                // 椭圆的理论填充率是 π/4≈0.785，手绘矩形（含转角圆润）通常在 0.9 以上。
+                double boxArea = bounds.Width * bounds.Height;
+                double fillRatio = boxArea > 0 ? GetPolygonArea(freehand.Points) / boxArea : 1.0;
+                bool isRound = fillRatio <= 0.87;
+
+                if (isRound)
+                {
+                    Rect ellipseBounds = bounds;
+                    double aspect = bounds.Width / Math.Max(1, bounds.Height);
+                    if (aspect >= 0.88 && aspect <= 1.14)
+                    {
+                        // 只有接近正圆时才吸附成正圆，避免把扁长椭圆强行拉成圆形
+                        double size = (bounds.Width + bounds.Height) / 2;
+                        var center = new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+                        ellipseBounds = new Rect(center.X - size / 2, center.Y - size / 2, size, size);
+                    }
+                    return new EllipseAnnotation
+                    {
+                        Bounds = ellipseBounds,
+                        StrokeColor = freehand.StrokeColor,
+                        Thickness = freehand.Thickness
+                    };
+                }
+
+                return new RectAnnotation
+                {
+                    Bounds = bounds,
+                    StrokeColor = freehand.StrokeColor,
+                    Thickness = freehand.Thickness
+                };
+            }
+
+            if (directLength >= 28 && pathLength > 0 && directLength / pathLength >= 0.42)
+            {
+                return new ArrowAnnotation
+                {
+                    Start = first,
+                    End = last,
+                    StrokeColor = freehand.StrokeColor,
+                    Thickness = freehand.Thickness,
+                    Style = CurrentArrowStyle
+                };
+            }
+
+            return null;
+        }
+
+        private static double GetPolygonArea(IList<Point> points)
+        {
+            double area = 0;
+            int n = points.Count;
+            for (int i = 0; i < n; i++)
+            {
+                Point a = points[i];
+                Point b = points[(i + 1) % n];
+                area += a.X * b.Y - b.X * a.Y;
+            }
+            return Math.Abs(area) / 2.0;
+        }
+
+        private static double GetPathLength(IList<Point> points)
+        {
+            double length = 0;
+            for (int i = 1; i < points.Count; i++)
+                length += (points[i] - points[i - 1]).Length;
+            return length;
+        }
+
+        private static Rect NormalizeRect(Rect rect)
+        {
+            double x = Math.Min(rect.Left, rect.Right);
+            double y = Math.Min(rect.Top, rect.Bottom);
+            double width = Math.Abs(rect.Width);
+            double height = Math.Abs(rect.Height);
+            return new Rect(x, y, width, height);
+        }
+
+        private static Rect BuildSquareRect(Point start, Point end)
+        {
+            double dx = end.X - start.X;
+            double dy = end.Y - start.Y;
+            double size = Math.Min(Math.Abs(dx), Math.Abs(dy));
+            return new Rect(start, new Point(
+                start.X + Math.Sign(dx == 0 ? 1 : dx) * size,
+                start.Y + Math.Sign(dy == 0 ? 1 : dy) * size));
         }
 
         private static bool IsDrawingValid(Annotation a)
@@ -448,7 +635,7 @@ namespace PicMark
             _textEditor = new TextBox
             {
                 Text = _editingText.Text,
-                FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei"),
+                FontFamily = new FontFamily(DefaultFontFamily),
                 FontWeight = FontWeights.Bold,
                 Foreground = new SolidColorBrush(_editingText.StrokeColor),
                 Background = new SolidColorBrush(Color.FromArgb(238, 255, 255, 255)),
@@ -511,6 +698,7 @@ namespace PicMark
             double scaledFontSize = Math.Max(12, _editingText.FontSize * Scale);
             _textEditor.FontSize = scaledFontSize;
             _textEditor.MinWidth = Math.Max(140, 240 * Scale);
+            _textEditor.MinHeight = Math.Max(34, scaledFontSize * 1.6);
             _textEditor.MaxWidth = Image == null
                 ? 600
                 : Math.Max(180, (Image.PixelWidth - _editingText.Location.X) * Scale - 20);
@@ -575,19 +763,26 @@ namespace PicMark
                 displayText,
                 CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                new Typeface(new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                new Typeface(new FontFamily(DefaultFontFamily), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
                 _editingText.FontSize,
                 brush,
                 1.0);
 
             var bounds = new Rect(_editingText.Location, new Size(Math.Max(ft.Width, 60), Math.Max(ft.Height, _editingText.FontSize + 8)));
             bounds.Inflate(10, 6);
-            dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(80, 20, 20, 20)), new Pen(new SolidColorBrush(Color.FromRgb(91, 108, 255)), 2), bounds, 4, 4);
+
+            if (_cacheEditingBgBrush == null)
+                _cacheEditingBgBrush = new SolidColorBrush(Color.FromArgb(80, 20, 20, 20));
+            if (_cacheEditingPen == null)
+                _cacheEditingPen = new Pen(new SolidColorBrush(Color.FromRgb(91, 108, 255)), 2);
+
+            dc.DrawRoundedRectangle(_cacheEditingBgBrush, _cacheEditingPen, bounds, 4, 4);
             dc.DrawText(ft, _editingText.Location);
         }
 
         public void ClearAll()
         {
+            _beautifyTimer.Stop();
             Annotations.Clear();
             SetSelected(null);
             _drawing = null;
@@ -641,7 +836,8 @@ namespace PicMark
             using (var dc = visual.RenderOpen())
             {
                 dc.DrawImage(Image, new Rect(0, 0, Image.PixelWidth, Image.PixelHeight));
-                foreach (var a in Annotations)
+                var snapshot = Annotations.ToArray();
+                foreach (var a in snapshot)
                     a.Draw(dc, false, Image);
             }
             var rtb = new RenderTargetBitmap(Image.PixelWidth, Image.PixelHeight, 96, 96, PixelFormats.Pbgra32);

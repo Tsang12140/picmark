@@ -12,12 +12,12 @@ namespace PicMark
             using (var skBitmap = SKBitmap.Decode(path))
             {
                 if (skBitmap == null)
-                    throw new InvalidOperationException("无法解析这张 WEBP 图片，文件可能已损坏。");
+                    throw new InvalidOperationException($"无法解析这张 WEBP 图片，文件可能已损坏。\n路径：{path}");
 
                 using (var converted = skBitmap.Copy(SKColorType.Bgra8888))
                 {
                     if (converted == null)
-                        throw new InvalidOperationException("无法解析这张 WEBP 图片，文件可能已损坏。");
+                        throw new InvalidOperationException($"无法解析这张 WEBP 图片，文件可能已损坏。\n路径：{path}");
 
                     int w = converted.Width, h = converted.Height;
                     int stride = converted.RowBytes;

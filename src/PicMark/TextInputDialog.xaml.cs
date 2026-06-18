@@ -61,8 +61,9 @@ namespace PicMark
 
         private void FontSizeBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
         {
-            ResultFontSize = GetSelectedFontSize();
-            TxtInput.FontSize = ResultFontSize;
+            double size = GetSelectedFontSize();
+            ResultFontSize = size;
+            TxtInput.FontSize = size;
         }
 
         private double GetSelectedFontSize()
@@ -89,7 +90,7 @@ namespace PicMark
                     bestItem = item;
                 }
             }
-            FontSizeBox.SelectedItem = bestItem ?? FontSizeBox.Items[1];
+            FontSizeBox.SelectedItem = bestItem ?? FontSizeBox.Items[0];
             ResultFontSize = GetSelectedFontSize();
             TxtInput.FontSize = ResultFontSize;
         }

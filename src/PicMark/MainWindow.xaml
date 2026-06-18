@@ -2,13 +2,24 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:PicMark"
-        Title="简标 PicMark - 图片标注" Height="840" Width="1280"
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="简标 PicMark" Height="840" Width="1280"
         MinWidth="1180" MinHeight="720"
         Icon="App.ico"
+        WindowStyle="None"
+        ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True" Drop="Window_Drop"
-        FontFamily="Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, Segoe UI"
+        FontFamily="Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI"
         Background="#FF242424">
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome
+            GlassFrameThickness="0"
+            CornerRadius="0"
+            CaptionHeight="0"
+            ResizeBorderThickness="4"
+            UseAeroCaptionButtons="False"/>
+    </shell:WindowChrome.WindowChrome>
     <Window.Resources>
         <SolidColorBrush x:Key="AccentBrush" Color="#FF5265FF"/>
         <SolidColorBrush x:Key="ActiveBrush" Color="#FF5265FF"/>
@@ -17,9 +28,63 @@
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FFB9BEC7"/>
         <SolidColorBrush x:Key="PanelBrush" Color="#FF343434"/>
         <SolidColorBrush x:Key="ToolbarBrush" Color="#FF252525"/>
+        <SolidColorBrush x:Key="TitleBarBrush" Color="#FF1C1C1C"/>
         <SolidColorBrush x:Key="BorderBrush1" Color="#FF464646"/>
         <SolidColorBrush x:Key="HoverBrush" Color="#FF3F3F3F"/>
         <SolidColorBrush x:Key="PressedBrush" Color="#FF4A4A4A"/>
+        <SolidColorBrush x:Key="CloseHoverBrush" Color="#FFE81123"/>
+        <SolidColorBrush x:Key="ClosePressedBrush" Color="#FFF1707A"/>
+
+        <Style x:Key="TitleBarButton" TargetType="Button">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TitleBarCloseButton" TargetType="Button" BasedOn="{StaticResource TitleBarButton}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource CloseHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ClosePressedBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
 
         <Style x:Key="ToolButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -84,21 +149,38 @@
         </Style>
 
         <Style x:Key="PanelTitle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="24"/>
+            <Setter Property="FontSize" Value="20"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="Margin" Value="0,0,0,18"/>
+            <Setter Property="Margin" Value="0,0,0,14"/>
         </Style>
 
         <Style x:Key="PanelToolButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
-            <Setter Property="Width" Value="88"/>
-            <Setter Property="Height" Value="72"/>
-            <Setter Property="Margin" Value="6"/>
+            <Setter Property="Width" Value="86"/>
+            <Setter Property="Height" Value="70"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Padding" Value="8,7"/>
             <Setter Property="Background" Value="#FF424242"/>
             <Setter Property="BorderBrush" Value="#FF5A5A5A"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+
+        <Style x:Key="PanelToolIcon" TargetType="Path">
+            <Setter Property="Stroke" Value="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"/>
+            <Setter Property="StrokeThickness" Value="1.7"/>
+            <Setter Property="StrokeStartLineCap" Value="Round"/>
+            <Setter Property="StrokeEndLineCap" Value="Round"/>
+            <Setter Property="StrokeLineJoin" Value="Round"/>
+            <Setter Property="Fill" Value="Transparent"/>
+        </Style>
+
+        <Style x:Key="PanelToolLabel" TargetType="TextBlock">
+            <Setter Property="HorizontalAlignment" Value="Center"/>
+            <Setter Property="Margin" Value="0,6,0,0"/>
+            <Setter Property="TextAlignment" Value="Center"/>
+            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
         </Style>
 
         <Style x:Key="ColorSwatch" TargetType="Button">
@@ -147,9 +229,159 @@
             <Setter Property="Margin" Value="2,0"/>
             <Setter Property="Padding" Value="6,0"/>
         </Style>
+
+        <Style x:Key="DarkComboItem" TargetType="ComboBoxItem">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Background" Value="#FF303030"/>
+            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBoxItem">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource ActiveBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkComboBox" TargetType="ComboBox">
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Background" Value="#FF303030"/>
+            <Setter Property="BorderBrush" Value="#FF4A4A4A"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboItem}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                          IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          ClickMode="Press"
+                                          Focusable="False"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="6">
+                                            <Grid>
+                                                <ContentPresenter Margin="10,0,24,0"
+                                                                  HorizontalAlignment="Left"
+                                                                  VerticalAlignment="Center"
+                                                                  RecognizesAccessKey="True"/>
+                                                <Path HorizontalAlignment="Right" VerticalAlignment="Center"
+                                                      Margin="0,0,8,0" Width="8" Height="5"
+                                                      Fill="{StaticResource TextSecondaryBrush}"
+                                                      Stretch="Uniform"
+                                                      Data="M 0 0 L 5 5 L 10 0 Z"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <ContentPresenter x:Name="ContentSite"
+                                              IsHitTestVisible="False"
+                                              Content="{TemplateBinding SelectionBoxItem}"
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                              Margin="10,0,24,0"
+                                              VerticalAlignment="Center"
+                                              HorizontalAlignment="Left"/>
+                            <TextBox x:Name="PART_EditableTextBox"
+                                     Visibility="Hidden"
+                                     IsReadOnly="{TemplateBinding IsReadOnly}"
+                                     Background="Transparent"
+                                     Foreground="{StaticResource TextPrimaryBrush}"
+                                     BorderThickness="0"
+                                     Margin="8,0,24,0"
+                                     VerticalContentAlignment="Center"/>
+                            <Popup x:Name="Popup"
+                                   Placement="Bottom"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Fade">
+                                <Border Background="#FF303030"
+                                        BorderBrush="#FF4A4A4A"
+                                        BorderThickness="1"
+                                        CornerRadius="8"
+                                        Padding="4"
+                                        MinWidth="{TemplateBinding ActualWidth}">
+                                    <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                                        <ItemsPresenter/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsEditable" Value="True">
+                                <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                                <Setter TargetName="ContentSite" Property="Visibility" Value="Hidden"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <DockPanel>
+        <!-- Custom Title Bar -->
+        <Border x:Name="TitleBar" DockPanel.Dock="Top" Height="30" Background="{StaticResource TitleBarBrush}"
+                BorderBrush="#FF383838" BorderThickness="0,0,0,1"
+                MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="14,0,0,0">
+                    <Image Source="App.ico" Width="14" Height="14" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="简标 PicMark" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="BtnMinimize" Style="{StaticResource TitleBarButton}" Click="BtnMinimize_Click" ToolTip="最小化">
+                        <Path Width="10" Height="10" Stretch="Uniform" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1"
+                              Data="M 1 5.5 L 9 5.5"/>
+                    </Button>
+                    <Button x:Name="BtnMaximize" Style="{StaticResource TitleBarButton}" Click="BtnMaximize_Click" ToolTip="最大化">
+                        <Grid>
+                            <Path x:Name="MaximizeIcon" Width="10" Height="10" Stretch="Uniform" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1"
+                                  Data="M 1 2 L 9 2 L 9 8 L 1 8 Z"/>
+                            <Path x:Name="RestoreIcon" Width="10" Height="10" Stretch="Uniform" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1"
+                                  Visibility="Collapsed"
+                                  Data="M 3 1 L 9 1 L 9 7 L 7 7 L 7 3 L 3 3 Z M 1 3 L 7 3 L 7 9 L 1 9 Z"/>
+                        </Grid>
+                    </Button>
+                    <Button x:Name="BtnClose" Style="{StaticResource TitleBarCloseButton}" Click="BtnClose_Click" ToolTip="关闭">
+                        <Path Width="10" Height="10" Stretch="Uniform" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1.2"
+                              Data="M 1.5 1.5 L 8.5 8.5 M 8.5 1.5 L 1.5 8.5"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <Border DockPanel.Dock="Top" Height="54" Background="{StaticResource ToolbarBrush}" BorderBrush="#FF383838" BorderThickness="0,0,0,1">
             <Grid Margin="10,0">
                 <Grid.ColumnDefinitions>
@@ -159,23 +391,14 @@
                 </Grid.ColumnDefinitions>
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <Button Style="{StaticResource PrimaryButton}" Height="30" MinWidth="64" Click="BtnPan_Click">
-                        <TextBlock Text="编辑"/>
-                    </Button>
-                    <Button x:Name="BtnOpen" Style="{StaticResource ToolButton}" Height="30" Click="BtnOpen_Click" ToolTip="打开图片 (Ctrl+O)">
+                    <Button x:Name="BtnOpen" Style="{StaticResource PrimaryButton}" Height="30" Click="BtnOpen_Click" ToolTip="打开图片 (Ctrl+O)">
                         <TextBlock Text="打开"/>
                     </Button>
-                    <Button Style="{StaticResource ToolButton}" Height="30" ToolTip="打印">
+                    <Button Style="{StaticResource ToolButton}" Height="30" Click="BtnPrint_Click" ToolTip="打印当前图片">
                         <TextBlock Text="打印"/>
-                    </Button>
-                    <Button Style="{StaticResource ToolButton}" Height="30" IsEnabled="False" ToolTip="暂未实现">
-                        <TextBlock Text="转换"/>
                     </Button>
                     <Button Style="{StaticResource ToolButton}" Height="30" Click="MenuSaveAs_Click" ToolTip="压缩/另存为">
                         <TextBlock Text="压缩"/>
-                    </Button>
-                    <Button Style="{StaticResource ToolButton}" Height="30" IsEnabled="False" ToolTip="暂未实现">
-                        <TextBlock Text="AI设计"/>
                     </Button>
                     <Button Style="{StaticResource ToolButton}" Height="30" Click="BtnUndo_Click" ToolTip="撤销 (Ctrl+Z)">
                         <TextBlock Text="撤销"/>
@@ -201,18 +424,29 @@
                             </StackPanel>
                         </Border>
                     </Popup>
-                    <Button x:Name="BtnHistory" Style="{StaticResource ToolButton}" Height="30" Click="BtnHistory_Click">
-                        <TextBlock Text="历史版本"/>
-                    </Button>
                 </StackPanel>
 
                 <TextBlock x:Name="TopFileNameText" Grid.Column="1" Text="未打开图片"
                            Foreground="{StaticResource TextPrimaryBrush}" FontSize="13" FontWeight="Bold"
-                           VerticalAlignment="Center" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="16,0"/>
+                           VerticalAlignment="Center" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="16,0"
+                           MaxWidth="240" Visibility="Collapsed"/>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="PicMark" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                    <Button Style="{StaticResource ToolButton}" Height="30" MinWidth="34"><TextBlock Text="☰"/></Button>
+                    <Button x:Name="BtnOptions" Style="{StaticResource ToolButton}" Height="30" MinWidth="34" Click="BtnOptions_Click" ToolTip="选项">
+                        <TextBlock Text="☰"/>
+                    </Button>
+                    <Popup x:Name="OptionsPopup" PlacementTarget="{Binding ElementName=BtnOptions}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
+                        <Border Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="8" Width="190">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.35"/>
+                            </Border.Effect>
+                            <StackPanel>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuHistoryCache_Click">
+                                    <TextBlock Text="历史缓存"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+                    </Popup>
                 </StackPanel>
             </Grid>
         </Border>
@@ -270,6 +504,41 @@
                             </Border>
                         </Popup>
 
+                        <Popup x:Name="MosaicPopup" PlacementTarget="{Binding ElementName=BtnMosaic}" Placement="Right" StaysOpen="False" AllowsTransparency="True">
+                            <Border Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="10" Width="230">
+                                <StackPanel>
+                                    <UniformGrid Columns="2">
+                                        <Button x:Name="MosaicModePixelBtn" Style="{StaticResource ToolButton}" Tag="Pixelate" Click="MosaicMode_Click">
+                                            <TextBlock Text="马赛克"/>
+                                        </Button>
+                                        <Button x:Name="MosaicModeBlurBtn" Style="{StaticResource ToolButton}" Tag="Blur" Click="MosaicMode_Click">
+                                            <TextBlock Text="模糊"/>
+                                        </Button>
+                                    </UniformGrid>
+                                    <Grid Margin="4,10,4,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition/>
+                                            <ColumnDefinition Width="42"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Slider x:Name="MosaicStrengthSlider" Minimum="2" Maximum="30" Value="18"
+                                                TickFrequency="1" IsSnapToTickEnabled="True"
+                                                ValueChanged="MosaicStrengthSlider_ValueChanged"
+                                                PreviewMouseWheel="MosaicStrengthSlider_PreviewMouseWheel"/>
+                                        <TextBlock x:Name="MosaicStrengthText" Grid.Column="1" Text="18"
+                                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"
+                                                   TextAlignment="Right"/>
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+
+                        <Popup x:Name="ShapeHintPopup" PlacementTarget="{Binding ElementName=PanelBtnEllipse}" Placement="Left" StaysOpen="False" AllowsTransparency="True">
+                            <Border Background="#EE303030" BorderBrush="#FF5A5A5A" BorderThickness="1" CornerRadius="8" Padding="10,7">
+                                <TextBlock x:Name="ShapeHintText" Text="按住 Shift 画正圆"
+                                           Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                            </Border>
+                        </Popup>
+
                         <TextBlock Text="颜色" Style="{StaticResource SectionLabel}"/>
                         <WrapPanel>
                             <Button x:Name="ClrRed" Style="{StaticResource ColorSwatch}" Background="Red" Tag="Red" Click="Color_Click"/>
@@ -280,13 +549,6 @@
                             <Button x:Name="ClrWhite" Style="{StaticResource ColorSwatch}" Background="White" BorderBrush="#FFCCCCCC" Tag="White" Click="Color_Click"/>
                         </WrapPanel>
 
-                        <TextBlock Text="画笔大小" Style="{StaticResource SectionLabel}"/>
-                        <UniformGrid Columns="3">
-                            <Button x:Name="ThinBtn" Style="{StaticResource ToolButton}" Tag="3" Click="Thickness_Click"><TextBlock Text="细"/></Button>
-                            <Button x:Name="MidBtn" Style="{StaticResource ToolButton}" Tag="6" Click="Thickness_Click"><TextBlock Text="中"/></Button>
-                            <Button x:Name="ThickBtn" Style="{StaticResource ToolButton}" Tag="12" Click="Thickness_Click"><TextBlock Text="粗"/></Button>
-                        </UniformGrid>
-
                         <TextBlock Text="文字字号" Style="{StaticResource SectionLabel}"/>
                         <UniformGrid Columns="4">
                             <Button x:Name="FontSmallBtn" Style="{StaticResource ToolButton}" Tag="24" Click="FontSize_Click"><TextBlock Text="24"/></Button>
@@ -295,33 +557,32 @@
                             <Button x:Name="FontHugeBtn" Style="{StaticResource ToolButton}" Tag="72" Click="FontSize_Click"><TextBlock Text="72"/></Button>
                         </UniformGrid>
 
-                        <TextBlock Text="历史缓存" Style="{StaticResource SectionLabel}"/>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition/>
-                                <ColumnDefinition Width="54"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="HiddenHistoryCacheText" Style="{StaticResource PanelTextBox}" ToolTip="历史缓存上限，单位 MB"/>
-                            <Button Grid.Column="1" Style="{StaticResource ToolButton}" Height="32" Margin="6,0,0,0" Click="BtnApplyHistoryCache_Click"><TextBlock Text="应用"/></Button>
-                        </Grid>
-                        <TextBlock x:Name="HiddenHistoryCacheInfoText" Margin="4,7,0,0" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>
 
             <Grid Grid.Column="0" Background="#FF242424">
                 <Border x:Name="BatchBar" VerticalAlignment="Top" Background="#FF353B73" Visibility="Collapsed" Panel.ZIndex="3">
-                    <WrapPanel Orientation="Horizontal" Margin="8,4">
-                        <Button Style="{StaticResource ToolButton}" Click="BtnPrevImage_Click"><TextBlock Text="上一张"/></Button>
-                        <TextBlock x:Name="BatchPositionText" VerticalAlignment="Center" Margin="10,0" FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"/>
-                        <Button Style="{StaticResource ToolButton}" Click="BtnNextImage_Click"><TextBlock Text="下一张"/></Button>
-                    </WrapPanel>
+                    <Grid Margin="8,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Style="{StaticResource ToolButton}" Click="BtnPrevImage_Click"><TextBlock Text="上一张"/></Button>
+                        <TextBlock x:Name="BatchPositionText" Grid.Column="1" VerticalAlignment="Center" Margin="10,0"
+                                   FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <Button Grid.Column="2" Style="{StaticResource ToolButton}" Click="BtnNextImage_Click"><TextBlock Text="下一张"/></Button>
+                    </Grid>
                 </Border>
 
-                <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FF242424">
-                    <Border Padding="64,46,64,86">
+                <ScrollViewer x:Name="Scroller" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden" Background="#FF242424">
+                    <Border x:Name="CanvasHost" Padding="64,46,64,112" HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                            MinWidth="{Binding ActualWidth, ElementName=Scroller}"
+                            MinHeight="{Binding ActualHeight, ElementName=Scroller}">
                         <Border x:Name="CanvasFrame" Background="White" Visibility="Collapsed"
-                                HorizontalAlignment="Left" VerticalAlignment="Top">
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
                             <Border.Effect>
                                 <DropShadowEffect Color="#FF000000" BlurRadius="28" ShadowDepth="8" Opacity="0.45"/>
                             </Border.Effect>
@@ -331,7 +592,8 @@
                 </ScrollViewer>
 
                 <Border x:Name="EmptyState" Width="430" Height="255" HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Background="#FF2A2D33" BorderBrush="#FF414650" BorderThickness="1" CornerRadius="10">
+                        Background="#FF2A2D33" BorderBrush="#FF414650" BorderThickness="1" CornerRadius="10"
+                        Cursor="Hand" MouseLeftButtonUp="EmptyState_MouseLeftButtonUp">
                     <Border.Effect>
                         <DropShadowEffect Color="#FF000000" BlurRadius="22" ShadowDepth="6" Opacity="0.25"/>
                     </Border.Effect>
@@ -341,42 +603,138 @@
                     </StackPanel>
                 </Border>
 
-                <TextBlock x:Name="StatusText" Text="请打开一张图片，或按 Ctrl+V 粘贴截图，也可以直接把图片拖进窗口"
-                           HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="18,0,0,16"
-                           FontSize="12.5" Foreground="{StaticResource TextSecondaryBrush}"/>
+                <Grid VerticalAlignment="Bottom" Margin="16,0,16,16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
 
-                <Border HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,16" Padding="8,5"
-                        Background="#FF303030" BorderBrush="#FF454545" BorderThickness="1" CornerRadius="8">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button Style="{StaticResource BottomBarButton}" Click="BtnPan_Click" ToolTip="选择/移动"><TextBlock Text="手"/></Button>
-                        <Button Style="{StaticResource BottomBarButton}" Click="BtnZoomReset_Click" ToolTip="实际大小 (Ctrl+1)"><TextBlock Text="1:1"/></Button>
-                        <ComboBox x:Name="ZoomCombo" Width="86" Height="28" Margin="4,0" IsEditable="True" IsReadOnly="True"
-                                  Background="#FF3A3A3A" Foreground="{StaticResource TextPrimaryBrush}" SelectionChanged="ZoomCombo_SelectionChanged">
-                            <ComboBoxItem Content="适应" Tag="Fit"/>
-                            <ComboBoxItem Content="50%" Tag="0.5"/>
-                            <ComboBoxItem Content="75%" Tag="0.75"/>
-                            <ComboBoxItem Content="100%" Tag="1"/>
-                            <ComboBoxItem Content="150%" Tag="1.5"/>
-                            <ComboBoxItem Content="200%" Tag="2"/>
-                        </ComboBox>
-                        <Button Style="{StaticResource BottomBarButton}" Click="BtnZoomIn_Click" ToolTip="放大 (Ctrl++)"><TextBlock Text="+"/></Button>
-                        <Button Style="{StaticResource BottomBarButton}" Click="BtnZoomOut_Click" ToolTip="缩小 (Ctrl+-)"><TextBlock Text="-"/></Button>
-                        <Button Style="{StaticResource BottomBarButton}" Click="BtnZoomFit_Click" ToolTip="适应窗口 (Ctrl+0)"><TextBlock Text="适应"/></Button>
-                    </StackPanel>
-                </Border>
+                    <Border Grid.Column="0" HorizontalAlignment="Left" MaxWidth="300" Height="34" Padding="10,0"
+                            Background="#CC303030" BorderBrush="#FF454545" BorderThickness="1" CornerRadius="8">
+                        <TextBlock x:Name="StatusText" Text="打开、粘贴或拖入图片"
+                                   FontSize="12.5"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                    </Border>
+
+                    <Border Grid.Column="1" Padding="8,5"
+                            Background="#EE303030" BorderBrush="#FF454545" BorderThickness="1" CornerRadius="8">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Button x:Name="BottomPanBtn" Style="{StaticResource BottomBarButton}" Tag="Pan" Click="BtnPanCanvas_Click" ToolTip="抓手拖动画布">
+                                <Viewbox Width="14" Height="14">
+                                    <Canvas Width="20" Height="20">
+                                        <Path Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}"
+                                              StrokeThickness="1.7"
+                                              StrokeStartLineCap="Round"
+                                              StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"
+                                              Fill="Transparent"
+                                              Data="M 7 10 L 7 5 C 7 4.2 7.7 3.5 8.5 3.5 C 9.3 3.5 10 4.2 10 5 L 10 9 L 10 4.6 C 10 3.8 10.7 3.1 11.5 3.1 C 12.3 3.1 13 3.8 13 4.6 L 13 9.5 L 13 6 C 13 5.2 13.7 4.5 14.5 4.5 C 15.3 4.5 16 5.2 16 6 L 16 11.2 C 16 15.4 13.7 17.5 10.4 17.5 C 8.4 17.5 7 16.7 5.9 15.1 L 3.9 12.2 C 3.4 11.5 3.6 10.7 4.3 10.3 C 5 9.9 5.8 10.1 6.3 10.8 L 7 11.8 Z"/>
+                                    </Canvas>
+                                </Viewbox>
+                            </Button>
+                            <Button Style="{StaticResource BottomBarButton}" Click="BtnZoomReset_Click" ToolTip="实际大小 (Ctrl+1)"><TextBlock Text="1:1"/></Button>
+                            <ComboBox x:Name="ZoomCombo" Width="86" Height="28" Margin="4,0" IsEditable="True" IsReadOnly="True"
+                                      Style="{StaticResource DarkComboBox}"
+                                      SelectionChanged="ZoomCombo_SelectionChanged">
+                                <ComboBoxItem Content="适应" Tag="Fit"/>
+                                <ComboBoxItem Content="50%" Tag="0.5"/>
+                                <ComboBoxItem Content="75%" Tag="0.75"/>
+                                <ComboBoxItem Content="100%" Tag="1"/>
+                                <ComboBoxItem Content="150%" Tag="1.5"/>
+                                <ComboBoxItem Content="200%" Tag="2"/>
+                            </ComboBox>
+                            <Button Style="{StaticResource BottomBarButton}" Click="BtnZoomIn_Click" ToolTip="放大 (Ctrl++)"><TextBlock Text="+"/></Button>
+                            <Button Style="{StaticResource BottomBarButton}" Click="BtnZoomOut_Click" ToolTip="缩小 (Ctrl+-)"><TextBlock Text="-"/></Button>
+                            <Button Style="{StaticResource BottomBarButton}" Click="BtnZoomFit_Click" ToolTip="适应窗口 (Ctrl+0)"><TextBlock Text="适应"/></Button>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="2" HorizontalAlignment="Right" MaxWidth="260" Padding="10,6"
+                            Background="#CC303030" BorderBrush="#FF454545" BorderThickness="1" CornerRadius="8">
+                        <TextBlock x:Name="CurrentFileText" Text="未打开图片"
+                                   FontSize="12.5"
+                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   TextAlignment="Right"
+                                   TextTrimming="CharacterEllipsis"
+                                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+                    </Border>
+                </Grid>
             </Grid>
 
             <Border Grid.Column="1" Background="#FF3A3A3A" BorderBrush="#FF454545" BorderThickness="1,0,0,0" Padding="18">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Text="标注工具" Style="{StaticResource PanelTitle}"/>
-                        <UniformGrid Columns="3" Margin="-4,0,0,6">
-                            <Button x:Name="PanelBtnRect" Style="{StaticResource PanelToolButton}" Tag="Rectangle" Click="ToolButton_Click"><TextBlock Text="框选" HorizontalAlignment="Center"/></Button>
-                            <Button x:Name="PanelBtnEllipse" Style="{StaticResource PanelToolButton}" Tag="Ellipse" Click="ToolButton_Click"><TextBlock Text="圈选" HorizontalAlignment="Center"/></Button>
-                            <Button x:Name="PanelBtnArrow" Style="{StaticResource PanelToolButton}" Tag="Arrow" Click="ToolButton_Click"><TextBlock Text="箭头" HorizontalAlignment="Center"/></Button>
-                            <Button x:Name="PanelBtnText" Style="{StaticResource PanelToolButton}" Tag="Text" Click="ToolButton_Click"><TextBlock Text="文字" HorizontalAlignment="Center"/></Button>
-                            <Button x:Name="PanelBtnFreehand" Style="{StaticResource PanelToolButton}" Tag="Freehand" Click="ToolButton_Click"><TextBlock Text="画笔" HorizontalAlignment="Center"/></Button>
-                            <Button x:Name="PanelBtnMosaic" Style="{StaticResource PanelToolButton}" Tag="Mosaic" Click="ToolButton_Click"><TextBlock Text="马赛克" HorizontalAlignment="Center"/></Button>
+                        <UniformGrid Columns="3" Margin="-5,0,-5,10">
+                            <Button x:Name="PanelBtnRect" Style="{StaticResource PanelToolButton}" Tag="Rectangle" Click="ToolButton_Click" ToolTip="画框">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 5 7 L 5 5 L 7 5 M 17 5 L 19 5 L 19 7 M 19 17 L 19 19 L 17 19 M 7 19 L 5 19 L 5 17 M 8 5 L 16 5 M 19 8 L 19 16 M 16 19 L 8 19 M 5 16 L 5 8"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="框选"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="PanelBtnEllipse" Style="{StaticResource PanelToolButton}" Tag="Ellipse" Click="ToolButton_Click" ToolTip="画圈">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 12 5 C 16.4 5 19 7.5 19 12 C 19 16.5 16.4 19 12 19 C 7.6 19 5 16.5 5 12 C 5 7.5 7.6 5 12 5 Z"/>
+                                            <Path Style="{StaticResource PanelToolIcon}" StrokeDashArray="2 2" Data="M 7 7 L 17 17"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="圈选"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="PanelBtnArrow" Style="{StaticResource PanelToolButton}" Tag="Arrow" Click="ToolButton_Click" ToolTip="箭头">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 5 18 L 17 6"/>
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 10 6 L 17 6 L 17 13"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="箭头"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="PanelBtnText" Style="{StaticResource PanelToolButton}" Tag="Text" Click="ToolButton_Click" ToolTip="文字">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 6 6 L 18 6 M 12 6 L 12 18 M 9 18 L 15 18"/>
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 5 9 L 5 6 L 19 6 L 19 9"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="文字"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="PanelBtnFreehand" Style="{StaticResource PanelToolButton}" Tag="Freehand" Click="ToolButton_Click" ToolTip="画笔">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 6 18 L 8 13 L 16 5 C 17 4 19 6 18 7 L 10 15 Z"/>
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 8 13 L 11 16 M 5 19 C 7 20 9 20 11 18"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="画笔"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="PanelBtnMosaic" Style="{StaticResource PanelToolButton}" Tag="Mosaic" Click="ToolButton_Click" ToolTip="马赛克">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 5 5 L 10 5 L 10 10 L 5 10 Z M 14 5 L 19 5 L 19 10 L 14 10 Z M 5 14 L 10 14 L 10 19 L 5 19 Z M 14 14 L 19 14 L 19 19 L 14 19 Z"/>
+                                            <Path Style="{StaticResource PanelToolIcon}" Opacity="0.55" Data="M 10 10 L 14 10 L 14 14 L 10 14 Z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="马赛克"/>
+                                </StackPanel>
+                            </Button>
                         </UniformGrid>
 
                         <TextBlock Text="颜色" Style="{StaticResource SectionLabel}"/>
@@ -387,14 +745,26 @@
                             <Button x:Name="ClrSkyPanel" Style="{StaticResource ColorSwatch}" Background="DeepSkyBlue" Tag="DeepSkyBlue" Click="Color_Click"/>
                             <Button x:Name="ClrBlackPanel" Style="{StaticResource ColorSwatch}" Background="Black" Tag="Black" Click="Color_Click"/>
                             <Button x:Name="ClrWhitePanel" Style="{StaticResource ColorSwatch}" Background="White" BorderBrush="#FFCCCCCC" Tag="White" Click="Color_Click"/>
+                            <Button x:Name="ClrCustomPanel" Style="{StaticResource ToolButton}" Width="58" Height="28" Margin="4,3" Padding="4,0"
+                                    Click="ColorPicker_Click" ToolTip="色板 / RGB">
+                                <TextBlock Text="色板" FontSize="12"/>
+                            </Button>
                         </WrapPanel>
 
                         <TextBlock Text="画笔大小" Style="{StaticResource SectionLabel}"/>
-                        <UniformGrid Columns="3">
-                            <Button x:Name="ThinPanelBtn" Style="{StaticResource ToolButton}" Tag="3" Click="Thickness_Click"><TextBlock Text="细"/></Button>
-                            <Button x:Name="MidPanelBtn" Style="{StaticResource ToolButton}" Tag="6" Click="Thickness_Click"><TextBlock Text="中"/></Button>
-                            <Button x:Name="ThickPanelBtn" Style="{StaticResource ToolButton}" Tag="12" Click="Thickness_Click"><TextBlock Text="粗"/></Button>
-                        </UniformGrid>
+                        <Grid Margin="2,0,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition/>
+                                <ColumnDefinition Width="38"/>
+                            </Grid.ColumnDefinitions>
+                            <Slider x:Name="ThicknessSlider" Minimum="1" Maximum="20" Value="9"
+                                    TickFrequency="1" IsSnapToTickEnabled="True"
+                                    ValueChanged="ThicknessSlider_ValueChanged"
+                                    PreviewMouseWheel="ThicknessSlider_PreviewMouseWheel"/>
+                            <TextBlock x:Name="ThicknessValueText" Grid.Column="1" Text="9"
+                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       VerticalAlignment="Center" TextAlignment="Right"/>
+                        </Grid>
 
                         <TextBlock Text="文字字号" Style="{StaticResource SectionLabel}"/>
                         <UniformGrid Columns="4">
@@ -405,28 +775,19 @@
                         </UniformGrid>
 
                         <TextBlock Text="保存" Style="{StaticResource SectionLabel}"/>
-                        <Button Style="{StaticResource PrimaryButton}" Height="46" Margin="0,8,0,8" Click="MenuSaveAs_Click">
-                            <TextBlock Text="另存为新图片"/>
-                        </Button>
-                        <Button Style="{StaticResource ToolButton}" Height="38" Click="MenuOverwrite_Click">
-                            <TextBlock Text="覆盖原图"/>
-                        </Button>
-
-                        <TextBlock Text="历史缓存" Style="{StaticResource SectionLabel}"/>
-                        <Grid Margin="0,8,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition/>
-                                <ColumnDefinition Width="74"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="HistoryCacheText" Style="{StaticResource PanelTextBox}"
-                                     ToolTip="历史缓存上限，单位 MB"/>
-                            <Button Grid.Column="1" Style="{StaticResource ToolButton}" Height="34" Margin="8,0,0,0"
-                                    Click="BtnApplyHistoryCache_Click">
-                                <TextBlock Text="应用"/>
+                        <UniformGrid Columns="2" Margin="0,8,0,8">
+                            <Button Style="{StaticResource PrimaryButton}" Height="40" Margin="0,0,6,0" Click="MenuSaveAs_Click">
+                                <TextBlock Text="另存为"/>
                             </Button>
-                        </Grid>
-                        <TextBlock x:Name="HistoryCacheInfoText" Margin="0,7,0,0"
-                                   FontSize="12" Foreground="{StaticResource TextSecondaryBrush}"/>
+                            <Button Style="{StaticResource ToolButton}" Height="40" Margin="6,0,0,0"
+                                    BorderBrush="{StaticResource BorderBrush1}" BorderThickness="1"
+                                    Click="MenuOverwrite_Click">
+                                <TextBlock Text="覆盖原图"/>
+                            </Button>
+                        </UniformGrid>
+
+                        <TextBox x:Name="HistoryCacheText" Visibility="Collapsed"/>
+                        <TextBlock x:Name="HistoryCacheInfoText" Visibility="Collapsed"/>
                     </StackPanel>
                 </ScrollViewer>
             </Border>

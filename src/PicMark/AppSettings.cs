@@ -20,30 +20,41 @@ namespace PicMark
         public WindowState WindowState { get; set; } = WindowState.Normal;
         public string Tool { get; set; } = "Select";
         public string Color { get; set; } = "Red";
-        public string Thickness { get; set; } = "6";
+        public string Thickness { get; set; } = "9";
         public string FontSize { get; set; } = "36";
         public int HistoryCacheMb { get; set; } = 500;
 
         public static AppSettings Load()
         {
             var settings = new AppSettings();
-            if (!File.Exists(SettingsPath)) return settings;
-
-            foreach (var line in File.ReadAllLines(SettingsPath))
+            try
             {
-                int split = line.IndexOf('=');
-                if (split <= 0) continue;
-                string key = line.Substring(0, split);
-                string value = line.Substring(split + 1);
-                settings.SetValue(key, value);
+                if (!File.Exists(SettingsPath)) return settings;
+
+                foreach (var line in File.ReadAllLines(SettingsPath))
+                {
+                    int split = line.IndexOf('=');
+                    if (split <= 0) continue;
+                    string key = line.Substring(0, split);
+                    string value = line.Substring(split + 1);
+                    settings.SetValue(key, value);
+                }
+            }
+            catch
+            {
+                // 配置加载失败时返回默认设置，不阻塞启动
             }
             return settings;
         }
 
         public void Save()
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(SettingsPath));
-            var lines = new[]
+            try
+            {
+                string dir = Path.GetDirectoryName(SettingsPath);
+                if (!string.IsNullOrEmpty(dir))
+                    Directory.CreateDirectory(dir);
+                var lines = new[]
             {
                 "WindowLeft=" + FormatDouble(WindowLeft),
                 "WindowTop=" + FormatDouble(WindowTop),
@@ -57,6 +68,11 @@ namespace PicMark
                 "HistoryCacheMb=" + HistoryCacheMb
             };
             File.WriteAllLines(SettingsPath, lines);
+            }
+            catch
+            {
+                // 静默失败：配置保存不应影响用户体验
+            }
         }
 
         private void SetValue(string key, string value)

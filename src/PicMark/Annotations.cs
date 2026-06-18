@@ -8,6 +8,18 @@ using System.Windows.Media.Imaging;
 
 namespace PicMark
 {
+    internal static class AnnotationConstants
+    {
+        // 字体族包含 Win7 通用回退：阿里巴巴普惠体 → 微软雅黑 → 黑体
+        public const string DefaultFontFamily = "Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, sans-serif";
+    }
+
+    public enum MosaicMode
+    {
+        Pixelate,
+        Blur
+    }
+
     public enum ArrowStyle
     {
         Filled,
@@ -30,6 +42,7 @@ namespace PicMark
         {
             bounds.Inflate(6, 6);
             var pen = new Pen(Brushes.DodgerBlue, 2) { DashStyle = DashStyles.Dash };
+            pen.Freeze();
             dc.DrawRectangle(null, pen, bounds);
         }
     }
@@ -43,6 +56,7 @@ namespace PicMark
         public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
         {
             var pen = new Pen(new SolidColorBrush(StrokeColor), Thickness);
+            pen.Freeze();
             dc.DrawRectangle(null, pen, Bounds);
             if (selected) DrawSelectionAdorner(dc, Bounds);
         }
@@ -61,6 +75,7 @@ namespace PicMark
         public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
         {
             var pen = new Pen(new SolidColorBrush(StrokeColor), Thickness);
+            pen.Freeze();
             var center = new Point(Bounds.X + Bounds.Width / 2, Bounds.Y + Bounds.Height / 2);
             dc.DrawEllipse(null, pen, center, Bounds.Width / 2, Bounds.Height / 2);
             if (selected) DrawSelectionAdorner(dc, Bounds);
@@ -82,6 +97,7 @@ namespace PicMark
         public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
         {
             var brush = new SolidColorBrush(StrokeColor);
+            brush.Freeze();
             var dir = End - Start;
             if (dir.Length > 0.001)
             {
@@ -115,8 +131,6 @@ namespace PicMark
             double tailWidth = Math.Max(5, Thickness * 1.05);
             var normal = new Vector(-dir.Y, dir.X);
             var neck = End - dir * headLength;
-            var tailStartLeft = Start + normal * (tailWidth / 2);
-            var tailStartRight = Start - normal * (tailWidth / 2);
             var neckLeft = neck + normal * (tailWidth / 2);
             var neckRight = neck - normal * (tailWidth / 2);
             var headLeft = neck + normal * (headWidth / 2);
@@ -125,13 +139,12 @@ namespace PicMark
             var geo = new StreamGeometry();
             using (var ctx = geo.Open())
             {
-                ctx.BeginFigure(tailStartLeft, true, true);
+                ctx.BeginFigure(Start, true, true);
                 ctx.LineTo(neckLeft, true, true);
                 ctx.LineTo(headLeft, true, true);
                 ctx.LineTo(End, true, true);
                 ctx.LineTo(headRight, true, true);
                 ctx.LineTo(neckRight, true, true);
-                ctx.LineTo(tailStartRight, true, true);
             }
             geo.Freeze();
             dc.DrawGeometry(brush, null, geo);
@@ -208,17 +221,22 @@ namespace PicMark
         public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
         {
             if (Points.Count < 2) return;
-            var pen = new Pen(new SolidColorBrush(StrokeColor), Thickness)
+            var brush = new SolidColorBrush(StrokeColor);
+            brush.Freeze();
+            var pen = new Pen(brush, Thickness)
             {
                 StartLineCap = PenLineCap.Round,
                 EndLineCap = PenLineCap.Round,
                 LineJoin = PenLineJoin.Round
             };
+            pen.Freeze();
             var geo = new StreamGeometry();
             using (var ctx = geo.Open())
             {
                 ctx.BeginFigure(Points[0], false, false);
-                ctx.PolyLineTo(Points.Skip(1).ToList(), true, true);
+                // 避免 ToList() 分配，直接逐个添加
+                for (int i = 1; i < Points.Count; i++)
+                    ctx.LineTo(Points[i], true, true);
             }
             geo.Freeze();
             dc.DrawGeometry(null, pen, geo);
@@ -242,6 +260,14 @@ namespace PicMark
     {
         public Rect Bounds { get; set; }
         public int BlockSize { get; set; } = 18;
+        public MosaicMode Mode { get; set; } = MosaicMode.Pixelate;
+
+        // 缓存马赛克位图，仅当参数变化时重建
+        private BitmapSource _cachedBitmap;
+        private Rect _cachedBounds;
+        private int _cachedBlockSize;
+        private MosaicMode _cachedMode;
+        private WeakReference<BitmapSource> _cachedSourceRef;
 
         public override Rect GetBounds() => Bounds;
 
@@ -249,13 +275,38 @@ namespace PicMark
         {
             if (sourceImage != null)
             {
-                var pixelated = BuildPixelatedBitmap(sourceImage);
-                if (pixelated != null) dc.DrawImage(pixelated, Bounds);
+                var bitmap = GetOrBuildEffectBitmap(sourceImage);
+                if (bitmap != null) dc.DrawImage(bitmap, Bounds);
             }
             if (selected) DrawSelectionAdorner(dc, Bounds);
         }
 
-        private BitmapSource BuildPixelatedBitmap(BitmapSource sourceImage)
+        private BitmapSource GetOrBuildEffectBitmap(BitmapSource sourceImage)
+        {
+            // 检查缓存是否仍然有效
+            if (_cachedBitmap != null &&
+                _cachedSourceRef != null &&
+                _cachedSourceRef.TryGetTarget(out var cachedSource) &&
+                ReferenceEquals(cachedSource, sourceImage) &&
+                _cachedBounds == Bounds &&
+                _cachedBlockSize == BlockSize &&
+                _cachedMode == Mode)
+            {
+                return _cachedBitmap;
+            }
+
+            _cachedBitmap = BuildEffectBitmap(sourceImage);
+            _cachedBounds = Bounds;
+            _cachedBlockSize = BlockSize;
+            _cachedMode = Mode;
+            if (_cachedSourceRef == null)
+                _cachedSourceRef = new WeakReference<BitmapSource>(sourceImage);
+            else
+                _cachedSourceRef.SetTarget(sourceImage);
+            return _cachedBitmap;
+        }
+
+        private BitmapSource BuildEffectBitmap(BitmapSource sourceImage)
         {
             int x = Math.Max(0, (int)Math.Round(Bounds.X));
             int y = Math.Max(0, (int)Math.Round(Bounds.Y));
@@ -268,7 +319,18 @@ namespace PicMark
             var pixels = new byte[h * stride];
             converted.CopyPixels(new Int32Rect(x, y, w, h), pixels, stride, 0);
 
-            int block = Math.Max(2, BlockSize);
+            if (Mode == MosaicMode.Blur)
+                ApplyBlur(pixels, w, h, stride, Math.Max(1, BlockSize / 2));
+            else
+                ApplyPixelate(pixels, w, h, stride, Math.Max(2, BlockSize));
+
+            var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+            bmp.Freeze();
+            return bmp;
+        }
+
+        private static void ApplyPixelate(byte[] pixels, int w, int h, int stride, int block)
+        {
             for (int by = 0; by < h; by += block)
             {
                 int bh = Math.Min(block, h - by);
@@ -299,15 +361,79 @@ namespace PicMark
                     }
                 }
             }
+        }
 
-            var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
-            bmp.Freeze();
-            return bmp;
+        private static void ApplyBlur(byte[] pixels, int w, int h, int stride, int radius)
+        {
+            radius = Math.Max(1, Math.Min(radius, 18));
+            for (int pass = 0; pass < 3; pass++)
+            {
+                BoxBlurHorizontal(pixels, w, h, stride, radius);
+                BoxBlurVertical(pixels, w, h, stride, radius);
+            }
+        }
+
+        private static void BoxBlurHorizontal(byte[] pixels, int w, int h, int stride, int radius)
+        {
+            var copy = (byte[])pixels.Clone();
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int count = 0;
+                    int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
+                    int from = Math.Max(0, x - radius);
+                    int to = Math.Min(w - 1, x + radius);
+                    for (int sx = from; sx <= to; sx++)
+                    {
+                        int source = y * stride + sx * 4;
+                        sumB += copy[source];
+                        sumG += copy[source + 1];
+                        sumR += copy[source + 2];
+                        sumA += copy[source + 3];
+                        count++;
+                    }
+                    int target = y * stride + x * 4;
+                    pixels[target] = (byte)(sumB / count);
+                    pixels[target + 1] = (byte)(sumG / count);
+                    pixels[target + 2] = (byte)(sumR / count);
+                    pixels[target + 3] = (byte)(sumA / count);
+                }
+            }
+        }
+
+        private static void BoxBlurVertical(byte[] pixels, int w, int h, int stride, int radius)
+        {
+            var copy = (byte[])pixels.Clone();
+            for (int y = 0; y < h; y++)
+            {
+                for (int x = 0; x < w; x++)
+                {
+                    int count = 0;
+                    int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
+                    int from = Math.Max(0, y - radius);
+                    int to = Math.Min(h - 1, y + radius);
+                    for (int sy = from; sy <= to; sy++)
+                    {
+                        int source = sy * stride + x * 4;
+                        sumB += copy[source];
+                        sumG += copy[source + 1];
+                        sumR += copy[source + 2];
+                        sumA += copy[source + 3];
+                        count++;
+                    }
+                    int target = y * stride + x * 4;
+                    pixels[target] = (byte)(sumB / count);
+                    pixels[target + 1] = (byte)(sumG / count);
+                    pixels[target + 2] = (byte)(sumR / count);
+                    pixels[target + 3] = (byte)(sumA / count);
+                }
+            }
         }
 
         public override void Move(Vector delta) => Bounds = new Rect(Bounds.TopLeft + delta, Bounds.Size);
 
-        public override Annotation Clone() => new MosaicAnnotation { Bounds = Bounds, BlockSize = BlockSize, StrokeColor = StrokeColor, Thickness = Thickness };
+        public override Annotation Clone() => new MosaicAnnotation { Bounds = Bounds, BlockSize = BlockSize, Mode = Mode, StrokeColor = StrokeColor, Thickness = Thickness };
     }
 
     public class TextAnnotation : Annotation
@@ -318,13 +444,15 @@ namespace PicMark
 
         private FormattedText BuildFormattedText()
         {
+            var brush = new SolidColorBrush(StrokeColor);
+            brush.Freeze();
             return new FormattedText(
                 Text,
                 CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
-                new Typeface(new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei"), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
+                new Typeface(new FontFamily(AnnotationConstants.DefaultFontFamily), FontStyles.Normal, FontWeights.Bold, FontStretches.Normal),
                 FontSize,
-                new SolidColorBrush(StrokeColor),
+                brush,
                 1.0);
         }
 

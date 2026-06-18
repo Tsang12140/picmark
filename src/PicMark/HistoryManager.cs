@@ -27,8 +27,17 @@ namespace PicMark
 
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
-            using (var fs = new FileStream(imagePath, FileMode.Create, FileAccess.Write))
-                encoder.Save(fs);
+            try
+            {
+                using (var fs = new FileStream(imagePath, FileMode.Create, FileAccess.Write))
+                    encoder.Save(fs);
+            }
+            catch
+            {
+                // 保存失败时清理孤立的损坏文件
+                try { File.Delete(imagePath); } catch { }
+                throw;
+            }
 
             TrimCache(maxCacheMb);
             return imagePath;
@@ -38,7 +47,7 @@ namespace PicMark
         {
             if (!Directory.Exists(HistoryDirectory)) return 0;
             DeleteMetadataSidecars();
-            return Directory.GetFiles(HistoryDirectory, "*", SearchOption.TopDirectoryOnly)
+            return Directory.GetFiles(HistoryDirectory, "*.png", SearchOption.TopDirectoryOnly)
                 .Select(path => new FileInfo(path))
                 .Where(info => info.Exists)
                 .Sum(info => info.Length);
@@ -49,7 +58,7 @@ namespace PicMark
             if (!Directory.Exists(HistoryDirectory)) return;
             DeleteMetadataSidecars();
             long maxBytes = Math.Max(20, maxCacheMb) * 1024L * 1024L;
-            var files = Directory.GetFiles(HistoryDirectory, "*", SearchOption.TopDirectoryOnly)
+            var files = Directory.GetFiles(HistoryDirectory, "*.png", SearchOption.TopDirectoryOnly)
                 .Select(path => new FileInfo(path))
                 .Where(info => info.Exists)
                 .OrderBy(info => info.CreationTimeUtc)
@@ -65,20 +74,24 @@ namespace PicMark
                     file.Delete();
                     total -= length;
                 }
-                catch
-                {
-                    total -= length;
-                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+                // 删除失败时不减去 size，因为文件仍然占用空间
             }
         }
 
         private static void DeleteMetadataSidecars()
         {
-            foreach (var path in Directory.GetFiles(HistoryDirectory, "*.txt", SearchOption.TopDirectoryOnly))
+            try
             {
-                try { File.Delete(path); }
-                catch { }
+                foreach (var path in Directory.GetFiles(HistoryDirectory, "*.txt", SearchOption.TopDirectoryOnly))
+                {
+                    try { File.Delete(path); }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
             }
+            catch (DirectoryNotFoundException) { }
         }
 
         private static string MakeSafeFileName(string name)

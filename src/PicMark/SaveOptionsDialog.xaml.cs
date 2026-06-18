@@ -129,9 +129,23 @@ namespace PicMark
                 AppDialog.Show(this, "尺寸不正确。", "提示");
                 return;
             }
+            // Win7 环境内存受限，限制最大输出尺寸
+            const int maxDimension = 16384;
+            if (width > maxDimension || height > maxDimension)
+            {
+                AppDialog.Show(this, $"输出尺寸不能超过 {maxDimension} 像素。", "提示");
+                return;
+            }
             string dir = PathBox.Text.Trim();
             if (!Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
+            {
+                try { Directory.CreateDirectory(dir); }
+                catch (Exception ex)
+                {
+                    AppDialog.Show(this, $"无法创建目录：{ex.Message}", "错误");
+                    return;
+                }
+            }
             string name = string.IsNullOrWhiteSpace(NameBox.Text) ? "未命名" : NameBox.Text.Trim();
             string ext = GetSelectedExtension();
             TargetPath = Path.Combine(dir, name + ext);
@@ -151,7 +165,8 @@ namespace PicMark
                 DragMove();
         }
 
-        private string GetSelectedExtension() => (string)((ComboBoxItem)ExtCombo.SelectedItem).Content;
+        private string GetSelectedExtension() =>
+            (ExtCombo.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? ".png";
 
         private int GetSelectedQuality()
         {

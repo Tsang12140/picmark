@@ -1,3 +1,4 @@
+using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -38,7 +39,7 @@ namespace PicMark
             Background = Brushes.Transparent;
             ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false;
-            FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, Segoe UI");
+            FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI");
 
             Content = BuildContent(title, message);
         }
@@ -68,7 +69,11 @@ namespace PicMark
             var titleBar = new Grid { Margin = new Thickness(0, 0, 0, 22), Cursor = Cursors.SizeAll };
             titleBar.MouseLeftButtonDown += (s, e) =>
             {
-                if (e.ClickCount == 1) DragMove();
+                if (e.ClickCount == 1)
+                {
+                    try { DragMove(); }
+                    catch (InvalidOperationException) { }
+                }
             };
 
             var titleText = new TextBlock

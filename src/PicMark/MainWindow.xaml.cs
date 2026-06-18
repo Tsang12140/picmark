@@ -10,6 +10,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Windows.Shell;
 using Microsoft.Win32;
 
 namespace PicMark
@@ -29,24 +30,103 @@ namespace PicMark
         private bool _hasUnsavedChanges;
         private readonly AppSettings _settings;
         private bool _updatingZoomCombo;
+        private bool _fitToWindow = true;
+        private bool _panMode;
+        private bool _isPanningCanvas;
+        private Point _panStartPoint;
+        private double _panStartHorizontalOffset;
+        private double _panStartVerticalOffset;
+        private readonly DispatcherTimer _shapeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
 
         public MainWindow()
         {
             InitializeComponent();
+
+            // Win7 兼容：DWM 关闭时回退到标准窗口，移除 WindowChrome
+            if (!Win7Helper.CanUseWindowChrome)
+            {
+                WindowChrome.SetWindowChrome(this, null);
+                TitleBar.Visibility = Visibility.Collapsed;
+            }
+
             _settings = AppSettings.Load();
             ApplyWindowSettings();
             Canvas1.AnnotationsChanged += (s, e) => MarkDirty();
             Canvas1.SelectionChanged += Canvas1_SelectionChanged;
             Canvas1.TextEditFinished += (s, e) => SetActiveTool("Select");
             Canvas1.ScaleChanged += (s, e) => UpdateZoomControls();
-            Canvas1.PreviewMouseLeftButtonDown += (s, e) => ArrowPopup.IsOpen = false;
+            Canvas1.PreviewMouseLeftButtonDown += (s, e) =>
+            {
+                ArrowPopup.IsOpen = false;
+                MosaicPopup.IsOpen = false;
+                ShapeHintPopup.IsOpen = false;
+            };
             PreviewKeyDown += MainWindow_PreviewKeyDown;
             Closing += MainWindow_Closing;
+            StateChanged += MainWindow_StateChanged;
+            SizeChanged += MainWindow_SizeChanged;
             Scroller.PreviewMouseWheel += Scroller_PreviewMouseWheel;
+            Scroller.PreviewMouseLeftButtonDown += Scroller_PreviewMouseLeftButtonDown;
+            Scroller.PreviewMouseMove += Scroller_PreviewMouseMove;
+            Scroller.PreviewMouseLeftButtonUp += Scroller_PreviewMouseLeftButtonUp;
+            _shapeHintTimer.Tick += ShapeHintTimer_Tick;
             ApplyOptionSettings();
             HistoryCacheText.Text = _settings.HistoryCacheMb.ToString();
             UpdateHistoryCacheInfo();
+            SetMosaicMode(MosaicMode.Pixelate);
+            SetMosaicStrength(18);
             UpdateZoomControls();
+        }
+
+        private void MainWindow_StateChanged(object sender, EventArgs e)
+        {
+            if (WindowState == WindowState.Maximized)
+            {
+                BtnMaximize.ToolTip = "还原";
+                MaximizeIcon.Visibility = Visibility.Collapsed;
+                RestoreIcon.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                BtnMaximize.ToolTip = "最大化";
+                MaximizeIcon.Visibility = Visibility.Visible;
+                RestoreIcon.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        private void MainWindow_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (_fitToWindow && Canvas1.Image != null)
+                FitImageAfterLayout();
+        }
+
+        private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (e.ClickCount == 2)
+            {
+                // Double-click toggles maximize/restore
+                WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+            }
+            else if (e.ClickCount == 1)
+            {
+                try { DragMove(); }
+                catch (InvalidOperationException) { }
+            }
+        }
+
+        private void BtnMinimize_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState.Minimized;
+        }
+
+        private void BtnMaximize_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        }
+
+        private void BtnClose_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
         }
 
         public void OpenInitialFiles(IEnumerable<string> paths)
@@ -79,19 +159,67 @@ namespace PicMark
             else if (ctrl && e.Key == Key.O) { BtnOpen_Click(this, null); e.Handled = true; }
             else if (ctrl && e.Key == Key.V) { PasteFromClipboard(); e.Handled = true; }
             else if (ctrl && e.Key == Key.D) { Canvas1.Deselect(); e.Handled = true; }
-            else if (ctrl && (e.Key == Key.OemPlus || e.Key == Key.Add)) { Canvas1.Scale *= 1.25; e.Handled = true; }
-            else if (ctrl && (e.Key == Key.OemMinus || e.Key == Key.Subtract)) { Canvas1.Scale /= 1.25; e.Handled = true; }
+            else if (ctrl && (e.Key == Key.OemPlus || e.Key == Key.Add)) { _fitToWindow = false; Canvas1.Scale *= 1.25; e.Handled = true; }
+            else if (ctrl && (e.Key == Key.OemMinus || e.Key == Key.Subtract)) { _fitToWindow = false; Canvas1.Scale /= 1.25; e.Handled = true; }
             else if (ctrl && e.Key == Key.D0) { AutoFitZoom(); e.Handled = true; }
-            else if (ctrl && e.Key == Key.D1) { Canvas1.Scale = 1.0; e.Handled = true; }
+            else if (ctrl && e.Key == Key.D1) { _fitToWindow = false; Canvas1.Scale = 1.0; e.Handled = true; }
             else if ((e.Key == Key.Delete || e.Key == Key.Back) && Canvas1.HasSelection) { Canvas1.DeleteSelected(); e.Handled = true; }
         }
 
         private void Scroller_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (Canvas1.Image == null) return;
-            if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) return;
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+            {
+                _fitToWindow = false;
+                Canvas1.Scale *= e.Delta > 0 ? 1.15 : 1 / 1.15;
+                e.Handled = true;
+                return;
+            }
 
-            Canvas1.Scale *= e.Delta > 0 ? 1.15 : 1 / 1.15;
+            if (Canvas1.CurrentTool == AnnotationTool.Freehand ||
+                Canvas1.CurrentTool == AnnotationTool.Rectangle ||
+                Canvas1.CurrentTool == AnnotationTool.Ellipse ||
+                Canvas1.CurrentTool == AnnotationTool.Arrow)
+            {
+                AdjustThickness(e.Delta > 0 ? 1 : -1);
+                e.Handled = true;
+            }
+            else if (Canvas1.CurrentTool == AnnotationTool.Mosaic)
+            {
+                AdjustMosaicStrength(e.Delta > 0 ? 1 : -1);
+                e.Handled = true;
+            }
+        }
+
+        private void Scroller_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            if (!_panMode || Canvas1.Image == null) return;
+            _isPanningCanvas = true;
+            _panStartPoint = e.GetPosition(Scroller);
+            _panStartHorizontalOffset = Scroller.HorizontalOffset;
+            _panStartVerticalOffset = Scroller.VerticalOffset;
+            Scroller.CaptureMouse();
+            Scroller.Cursor = Cursors.Hand;
+            e.Handled = true;
+        }
+
+        private void Scroller_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_isPanningCanvas) return;
+            var point = e.GetPosition(Scroller);
+            var delta = point - _panStartPoint;
+            Scroller.ScrollToHorizontalOffset(_panStartHorizontalOffset - delta.X);
+            Scroller.ScrollToVerticalOffset(_panStartVerticalOffset - delta.Y);
+            e.Handled = true;
+        }
+
+        private void Scroller_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isPanningCanvas) return;
+            _isPanningCanvas = false;
+            Scroller.ReleaseMouseCapture();
+            Scroller.Cursor = _panMode ? Cursors.Hand : null;
             e.Handled = true;
         }
 
@@ -115,7 +243,7 @@ namespace PicMark
         {
             string tool = Enum.TryParse(_settings.Tool, out AnnotationTool _) ? _settings.Tool : "Select";
             string color = string.IsNullOrWhiteSpace(_settings.Color) ? "Red" : _settings.Color;
-            string thickness = new[] { "3", "6", "12" }.Contains(_settings.Thickness) ? _settings.Thickness : "6";
+            string thickness = double.TryParse(_settings.Thickness, out _) ? _settings.Thickness : "9";
             string fontSize = new[] { "24", "36", "52", "72" }.Contains(_settings.FontSize) ? _settings.FontSize : "36";
 
             SetActiveTool(tool);
@@ -173,6 +301,11 @@ namespace PicMark
                 ClearBatch();
                 LoadImage(dlg.FileName);
             }
+        }
+
+        private void EmptyState_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            BtnOpen_Click(sender, e);
         }
 
         private void BtnOpenMultiple_Click(object sender, RoutedEventArgs e)
@@ -270,9 +403,9 @@ namespace PicMark
             _currentFilePath = path;
             _currentExtension = ext == ".webp" ? ".png" : ext;
             _hasUnsavedChanges = false;
-            TopFileNameText.Text = Path.GetFileName(path);
+            SetCurrentFileName(Path.GetFileName(path));
             FitImageAfterLayout();
-            UpdateStatus($"已打开：{Path.GetFileName(path)}（{bmp.PixelWidth}×{bmp.PixelHeight}像素）");
+            UpdateStatus($"已打开 {bmp.PixelWidth}×{bmp.PixelHeight}");
         }
 
         private static BitmapSource LoadStandardBitmap(string path)
@@ -309,7 +442,7 @@ namespace PicMark
             _currentFilePath = null;
             _currentExtension = ".png";
             _hasUnsavedChanges = false;
-            TopFileNameText.Text = "剪贴板图片.png";
+            SetCurrentFileName("剪贴板图片.png");
             FitImageAfterLayout();
             UpdateStatus("已粘贴剪贴板图片，保存时请选择保存位置");
         }
@@ -322,10 +455,17 @@ namespace PicMark
         private void AutoFitZoom()
         {
             if (Canvas1.Image == null) return;
-            double viewW = Math.Max(Scroller.ActualWidth - 20, 200);
-            double viewH = Math.Max(Scroller.ActualHeight - 20, 200);
+            _fitToWindow = true;
+            Thickness padding = CanvasHost?.Padding ?? new Thickness(0);
+            double viewW = Math.Max(Scroller.ActualWidth - padding.Left - padding.Right, 200);
+            double viewH = Math.Max(Scroller.ActualHeight - padding.Top - padding.Bottom, 200);
             double fit = Math.Min(viewW / Canvas1.Image.PixelWidth, viewH / Canvas1.Image.PixelHeight);
             Canvas1.Scale = fit;
+            Dispatcher.BeginInvoke((Action)(() =>
+            {
+                Scroller.ScrollToHorizontalOffset(0);
+                Scroller.ScrollToVerticalOffset(0);
+            }), DispatcherPriority.Background);
         }
 
         private void SetImageWorkspaceVisible(bool hasImage)
@@ -353,6 +493,7 @@ namespace PicMark
             }
             else if (double.TryParse(tag, out double scale))
             {
+                _fitToWindow = false;
                 Canvas1.Scale = scale;
             }
             ZoomCombo.SelectedItem = null;
@@ -367,15 +508,53 @@ namespace PicMark
             UpdateStatus("已切回选择/移动。");
         }
 
+        private void BtnPanCanvas_Click(object sender, RoutedEventArgs e)
+        {
+            _panMode = !_panMode;
+            if (_panMode)
+            {
+                Canvas1.CurrentTool = AnnotationTool.Select;
+                ArrowPopup.IsOpen = false;
+                Scroller.Cursor = Cursors.Hand;
+                SetToolButtonState(new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText }, "Pan", Brushes.Transparent);
+                SetToolButtonState(new[] { PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText }, "Pan", new SolidColorBrush(Color.FromRgb(0x42, 0x42, 0x42)));
+                BottomPanBtn.Background = (Brush)FindResource("ActiveBrush");
+                BottomPanBtn.Foreground = Brushes.White;
+                BottomPanBtn.BorderBrush = (Brush)FindResource("ActiveBorderBrush");
+                BottomPanBtn.BorderThickness = new Thickness(2);
+                UpdateStatus("抓手模式：按住图片区域拖动查看。");
+            }
+            else
+            {
+                Scroller.Cursor = null;
+                SetActiveTool("Select");
+                UpdateStatus("已切回选择/移动。");
+            }
+        }
+
         private void ToolButton_Click(object sender, RoutedEventArgs e)
         {
             var button = (Button)sender;
             var tag = (string)button.Tag;
             SetActiveTool(tag);
+            if (tag == "Select")
+                UpdateStatus("选择 / 移动 — 单击标注可选中，拖拽可移动。");
+            if (tag == "Ellipse")
+            {
+                ShowShapeHint(button, "按住 Shift 画正圆");
+                UpdateStatus("圈选：按住 Shift 可画正圆。");
+            }
             if (tag == "Arrow")
             {
                 ArrowPopup.PlacementTarget = button == PanelBtnArrow ? PanelBtnArrow : BtnArrow;
                 ArrowPopup.IsOpen = true;
+                UpdateStatus("箭头：不选样式也可直接画，默认是尖尾箭头。");
+            }
+            if (tag == "Mosaic")
+            {
+                MosaicPopup.PlacementTarget = button == PanelBtnMosaic ? PanelBtnMosaic : BtnMosaic;
+                MosaicPopup.IsOpen = true;
+                UpdateStatus("马赛克：可切换马赛克/模糊，并调整程度。");
             }
             if (tag == "Text")
                 UpdateStatus("点击图片上的位置，然后直接输入文字；按 Enter 完成。");
@@ -391,11 +570,35 @@ namespace PicMark
             UpdateStatus("已选择箭头样式，直接在图片上拖动绘制。");
         }
 
+        private void ShowShapeHint(Button placementTarget, string text)
+        {
+            ShapeHintText.Text = text;
+            ShapeHintPopup.PlacementTarget = placementTarget;
+            ShapeHintPopup.IsOpen = true;
+            _shapeHintTimer.Stop();
+            _shapeHintTimer.Start();
+        }
+
+        private void ShapeHintTimer_Tick(object sender, EventArgs e)
+        {
+            _shapeHintTimer.Stop();
+            ShapeHintPopup.IsOpen = false;
+        }
+
         private void SetActiveTool(string tag)
         {
+            _panMode = false;
+            _isPanningCanvas = false;
+            Scroller.Cursor = null;
+            if (tag != "Arrow") ArrowPopup.IsOpen = false;
+            if (tag != "Mosaic") MosaicPopup.IsOpen = false;
             Canvas1.CurrentTool = (AnnotationTool)Enum.Parse(typeof(AnnotationTool), tag);
             SetToolButtonState(new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText }, tag, Brushes.Transparent);
             SetToolButtonState(new[] { PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText }, tag, new SolidColorBrush(Color.FromRgb(0x42, 0x42, 0x42)));
+            BottomPanBtn.Background = Brushes.Transparent;
+            BottomPanBtn.Foreground = (Brush)FindResource("TextPrimaryBrush");
+            BottomPanBtn.BorderBrush = (Brush)FindResource("BorderBrush1");
+            BottomPanBtn.BorderThickness = new Thickness(1);
             _settings.Tool = tag;
         }
 
@@ -404,6 +607,22 @@ namespace PicMark
             var btn = (Button)sender;
             Color selectedColor = SetColorOption((string)btn.Tag);
             if (Canvas1.HasSelection) Canvas1.SetSelectedColor(selectedColor);
+        }
+
+        private void ColorPicker_Click(object sender, RoutedEventArgs e)
+        {
+            var current = Canvas1.CurrentColor;
+            using (var dialog = new System.Windows.Forms.ColorDialog())
+            {
+                dialog.FullOpen = true;
+                dialog.Color = System.Drawing.Color.FromArgb(current.R, current.G, current.B);
+                if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+
+                var color = Color.FromRgb(dialog.Color.R, dialog.Color.G, dialog.Color.B);
+                string tag = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
+                SetColorOption(tag);
+                if (Canvas1.HasSelection) Canvas1.SetSelectedColor(color);
+            }
         }
 
         private Color SetColorOption(string tag)
@@ -420,6 +639,12 @@ namespace PicMark
             }
             Canvas1.CurrentColor = selectedColor;
             SetActiveColorButton(tag);
+            if (ClrCustomPanel != null && tag.StartsWith("#"))
+            {
+                ClrCustomPanel.Background = new SolidColorBrush(selectedColor);
+                ClrCustomPanel.Foreground = IsLightColor(selectedColor) ? Brushes.Black : Brushes.White;
+                ClrCustomPanel.BorderThickness = new Thickness(2);
+            }
             _settings.Color = tag;
             return selectedColor;
         }
@@ -428,7 +653,16 @@ namespace PicMark
         {
             foreach (var btn in new[] { ClrRed, ClrGold, ClrLime, ClrSky, ClrBlack, ClrWhite, ClrRedPanel, ClrGoldPanel, ClrLimePanel, ClrSkyPanel, ClrBlackPanel, ClrWhitePanel })
                 btn.BorderThickness = (string)btn.Tag == tag ? new Thickness(3) : new Thickness(1);
+            if (ClrCustomPanel != null && !tag.StartsWith("#"))
+            {
+                ClrCustomPanel.Background = Brushes.Transparent;
+                ClrCustomPanel.Foreground = (Brush)FindResource("TextPrimaryBrush");
+                ClrCustomPanel.BorderThickness = new Thickness(0);
+            }
         }
+
+        private static bool IsLightColor(Color color) =>
+            color.R * 0.299 + color.G * 0.587 + color.B * 0.114 > 170;
 
         private void Thickness_Click(object sender, RoutedEventArgs e)
         {
@@ -439,11 +673,35 @@ namespace PicMark
 
         private double SetThicknessOption(string tag)
         {
-            double thickness = double.Parse(tag);
-            Canvas1.CurrentThickness = thickness;
-            SetActiveThicknessButton(tag);
-            _settings.Thickness = tag;
+            if (!double.TryParse(tag, out double thickness)) thickness = 6;
+            thickness = Math.Max(1, Math.Min(20, Math.Round(thickness)));
+            if (Canvas1 != null) Canvas1.CurrentThickness = thickness;
+            if (ThicknessSlider != null && Math.Abs(ThicknessSlider.Value - thickness) > 0.001)
+                ThicknessSlider.Value = thickness;
+            if (ThicknessValueText != null)
+                ThicknessValueText.Text = ((int)thickness).ToString();
+            if (_settings != null) _settings.Thickness = ((int)thickness).ToString();
             return thickness;
+        }
+
+        private void ThicknessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            double thickness = SetThicknessOption(Math.Round(e.NewValue).ToString());
+            if (Canvas1 != null && Canvas1.HasSelection) Canvas1.SetSelectedThickness(thickness);
+        }
+
+        private void ThicknessSlider_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            AdjustThickness(e.Delta > 0 ? 1 : -1);
+            e.Handled = true;
+        }
+
+        private void AdjustThickness(int delta)
+        {
+            double next = Math.Max(1, Math.Min(20, Canvas1.CurrentThickness + delta));
+            double thickness = SetThicknessOption(next.ToString());
+            if (Canvas1.HasSelection) Canvas1.SetSelectedThickness(thickness);
+            UpdateStatus($"画笔大小：{(int)thickness}");
         }
 
         private void BtnFontSmaller_Click(object sender, RoutedEventArgs e)
@@ -458,12 +716,6 @@ namespace PicMark
             Canvas1.CurrentFontSize = Math.Min(160, Canvas1.CurrentFontSize + 6);
             _settings.FontSize = ((int)Canvas1.CurrentFontSize).ToString();
             if (Canvas1.IsTextSelected) Canvas1.AdjustSelectedFontSize(6);
-        }
-
-        private void SetActiveThicknessButton(string tag)
-        {
-            foreach (var btn in new[] { ThinBtn, MidBtn, ThickBtn, ThinPanelBtn, MidPanelBtn, ThickPanelBtn })
-                SetChoiceButtonState(btn, (string)btn.Tag == tag);
         }
 
         private void FontSize_Click(object sender, RoutedEventArgs e)
@@ -508,12 +760,55 @@ namespace PicMark
             btn.BorderThickness = active ? new Thickness(2) : new Thickness(1);
         }
 
+        private void MosaicMode_Click(object sender, RoutedEventArgs e)
+        {
+            string tag = (string)((Button)sender).Tag;
+            SetMosaicMode(tag == "Blur" ? MosaicMode.Blur : MosaicMode.Pixelate);
+        }
+
+        private void SetMosaicMode(MosaicMode mode)
+        {
+            Canvas1.CurrentMosaicMode = mode;
+            if (MosaicModePixelBtn != null)
+                SetChoiceButtonState(MosaicModePixelBtn, mode == MosaicMode.Pixelate);
+            if (MosaicModeBlurBtn != null)
+                SetChoiceButtonState(MosaicModeBlurBtn, mode == MosaicMode.Blur);
+            UpdateStatus(mode == MosaicMode.Blur ? "马赛克工具：模糊模式。" : "马赛克工具：像素马赛克模式。");
+        }
+
+        private void MosaicStrengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            SetMosaicStrength((int)Math.Round(e.NewValue));
+        }
+
+        private void MosaicStrengthSlider_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            AdjustMosaicStrength(e.Delta > 0 ? 1 : -1);
+            e.Handled = true;
+        }
+
+        private void AdjustMosaicStrength(int delta)
+        {
+            SetMosaicStrength(Canvas1.CurrentMosaicStrength + delta);
+            UpdateStatus($"马赛克/模糊程度：{Canvas1.CurrentMosaicStrength}");
+        }
+
+        private void SetMosaicStrength(int strength)
+        {
+            strength = Math.Max(2, Math.Min(30, strength));
+            if (Canvas1 != null) Canvas1.CurrentMosaicStrength = strength;
+            if (MosaicStrengthSlider != null && Math.Abs(MosaicStrengthSlider.Value - strength) > 0.001)
+                MosaicStrengthSlider.Value = strength;
+            if (MosaicStrengthText != null)
+                MosaicStrengthText.Text = strength.ToString();
+        }
+
         private void BtnUndo_Click(object sender, RoutedEventArgs e) => Canvas1.Undo();
         private void BtnRedo_Click(object sender, RoutedEventArgs e) => Canvas1.Redo();
         private void BtnDelete_Click(object sender, RoutedEventArgs e) => Canvas1.DeleteSelected();
-        private void BtnZoomIn_Click(object sender, RoutedEventArgs e) => Canvas1.Scale *= 1.25;
-        private void BtnZoomOut_Click(object sender, RoutedEventArgs e) => Canvas1.Scale /= 1.25;
-        private void BtnZoomReset_Click(object sender, RoutedEventArgs e) => Canvas1.Scale = 1.0;
+        private void BtnZoomIn_Click(object sender, RoutedEventArgs e) { _fitToWindow = false; Canvas1.Scale *= 1.25; }
+        private void BtnZoomOut_Click(object sender, RoutedEventArgs e) { _fitToWindow = false; Canvas1.Scale /= 1.25; }
+        private void BtnZoomReset_Click(object sender, RoutedEventArgs e) { _fitToWindow = false; Canvas1.Scale = 1.0; }
 
         private void Canvas1_SelectionChanged(object sender, EventArgs e)
         {
@@ -559,6 +854,33 @@ namespace PicMark
 
             Clipboard.SetImage(Canvas1.RenderFullResolution());
             UpdateStatus("已复制标注后的图片到剪贴板");
+        }
+
+        private void BtnPrint_Click(object sender, RoutedEventArgs e)
+        {
+            if (Canvas1.Image == null)
+            {
+                AppDialog.Show(this, "请先打开一张图片。", "提示");
+                return;
+            }
+
+            var printDialog = new PrintDialog();
+            if (printDialog.ShowDialog() != true) return;
+
+            var bitmap = Canvas1.RenderFullResolution();
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                double scale = Math.Min(printDialog.PrintableAreaWidth / bitmap.PixelWidth, printDialog.PrintableAreaHeight / bitmap.PixelHeight);
+                double width = bitmap.PixelWidth * scale;
+                double height = bitmap.PixelHeight * scale;
+                double x = (printDialog.PrintableAreaWidth - width) / 2;
+                double y = (printDialog.PrintableAreaHeight - height) / 2;
+                dc.DrawImage(bitmap, new Rect(x, y, width, height));
+            }
+
+            printDialog.PrintVisual(visual, "PicMark 图片");
+            UpdateStatus("已发送到打印机。");
         }
 
         private void BtnBack_Click(object sender, RoutedEventArgs e)
@@ -723,6 +1045,17 @@ namespace PicMark
             UpdateHistoryCacheInfo();
         }
 
+        private void BtnOptions_Click(object sender, RoutedEventArgs e)
+        {
+            OptionsPopup.IsOpen = true;
+        }
+
+        private void MenuHistoryCache_Click(object sender, RoutedEventArgs e)
+        {
+            OptionsPopup.IsOpen = false;
+            ShowHistoryCacheDialog();
+        }
+
         private void BtnApplyHistoryCache_Click(object sender, RoutedEventArgs e)
         {
             ApplyHistoryCacheSetting(true);
@@ -740,11 +1073,79 @@ namespace PicMark
             if (trimNow) HistoryManager.TrimCache(cacheMb);
         }
 
+        private void ApplyHistoryCacheSetting(bool trimNow, string cacheText)
+        {
+            HistoryCacheText.Text = cacheText;
+            ApplyHistoryCacheSetting(trimNow);
+        }
+
         private void UpdateHistoryCacheInfo()
         {
             if (HistoryCacheInfoText == null) return;
             double usedMb = HistoryManager.GetCacheBytes() / 1024.0 / 1024.0;
             HistoryCacheInfoText.Text = $"当前约 {usedMb:0.#} MB / 上限 {_settings.HistoryCacheMb} MB";
+        }
+
+        private void ShowHistoryCacheDialog()
+        {
+            double usedMb = HistoryManager.GetCacheBytes() / 1024.0 / 1024.0;
+            var dialog = new Window
+            {
+                Owner = this,
+                Title = "历史缓存",
+                Width = 360,
+                Height = 220,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = (Brush)FindResource("PanelBrush")
+            };
+
+            var root = new StackPanel { Margin = new Thickness(18) };
+            root.Children.Add(new TextBlock
+            {
+                Text = "历史缓存",
+                FontSize = 18,
+                FontWeight = FontWeights.Bold,
+                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                Margin = new Thickness(0, 0, 0, 14)
+            });
+            root.Children.Add(new TextBlock
+            {
+                Text = $"当前约 {usedMb:0.#} MB / 上限 {_settings.HistoryCacheMb} MB",
+                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var box = new TextBox
+            {
+                Text = _settings.HistoryCacheMb.ToString(),
+                Style = (Style)FindResource("PanelTextBox"),
+                Margin = new Thickness(0, 0, 0, 14)
+            };
+            root.Children.Add(box);
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var openButton = new Button { Content = "打开目录", Style = (Style)FindResource("ToolButton"), MinWidth = 78 };
+            var applyButton = new Button { Content = "应用", Style = (Style)FindResource("PrimaryButton"), MinWidth = 72 };
+            buttons.Children.Add(openButton);
+            buttons.Children.Add(applyButton);
+            root.Children.Add(buttons);
+
+            openButton.Click += (s, e) =>
+            {
+                Directory.CreateDirectory(HistoryManager.HistoryDirectory);
+                Process.Start(HistoryManager.HistoryDirectory);
+            };
+            applyButton.Click += (s, e) =>
+            {
+                ApplyHistoryCacheSetting(true, box.Text);
+                _settings.Save();
+                UpdateHistoryCacheInfo();
+                dialog.DialogResult = true;
+            };
+
+            dialog.Content = root;
+            dialog.ShowDialog();
         }
 
         private static string GetNonConflictingPath(string dir, string baseName, string ext)
@@ -788,6 +1189,24 @@ namespace PicMark
             UpdateStatus("已修改，记得点击右上角“保存”");
         }
 
+        private void SetCurrentFileName(string name)
+        {
+            string displayName = ShortenFileName(name);
+            TopFileNameText.Text = displayName;
+            TopFileNameText.ToolTip = name;
+            CurrentFileText.Text = displayName;
+            CurrentFileText.ToolTip = name;
+        }
+
         private void UpdateStatus(string text) => StatusText.Text = text;
+
+        private static string ShortenFileName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.Length <= 28) return name;
+            string extension = Path.GetExtension(name);
+            string stem = Path.GetFileNameWithoutExtension(name);
+            if (stem.Length <= 18) return name;
+            return stem.Substring(0, 18) + "..." + extension;
+        }
     }
 }
