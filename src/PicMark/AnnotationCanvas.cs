@@ -29,6 +29,17 @@ namespace PicMark
         private readonly UndoManager _undo = new UndoManager();
         private readonly DispatcherTimer _beautifyTimer;
         private DateTime _lastFreehandStrokeAt;
+        private WatermarkSettings _watermark;
+        private bool _isMovingSingleWatermark;
+        private Point _watermarkDragStartImagePoint;
+
+        private enum CropHandle { None, Move, N, S, E, W, NE, NW, SE, SW }
+        private Rect? _cropRect;
+        private double? _cropAspectRatio;
+        private CropHandle _cropDragHandle = CropHandle.None;
+        private Point _cropDragStartImagePoint;
+        private Rect _cropDragStartRect;
+        private const double CropHandleScreenSize = 9;
 
         // Win7 兼容：缓存渲染画笔，避免高频 OnRender 中每帧分配
         private SolidColorBrush _cacheBackgroundBrush;
@@ -48,9 +59,14 @@ namespace PicMark
         public event EventHandler SelectionChanged;
         public event EventHandler TextEditFinished;
         public event EventHandler ScaleChanged;
+        public event EventHandler WatermarkChanged;
 
         public Annotation Selected => _selected;
         public bool IsTextSelected => _selected is TextAnnotation;
+        public bool HasWatermark =>
+            _watermark != null &&
+            _watermark.Enabled &&
+            !string.IsNullOrWhiteSpace(_watermark.Text);
 
         public BitmapSource Image
         {
@@ -81,6 +97,7 @@ namespace PicMark
         }
 
         public bool HasSelection => _selected != null;
+        public bool HasPendingCrop => CurrentTool == AnnotationTool.Crop && _cropRect.HasValue;
 
         public AnnotationCanvas()
         {
@@ -153,11 +170,58 @@ namespace PicMark
                         a.Draw(dc, a == _selected, Image);
                 }
                 _drawing?.Draw(dc, false, Image);
+                _watermark?.Draw(dc, Image);
+                if (CurrentTool == AnnotationTool.Crop && _cropRect.HasValue)
+                    DrawCropOverlay(dc, _cropRect.Value);
             }
             finally
             {
                 dc.Pop();
             }
+        }
+
+        private void DrawCropOverlay(DrawingContext dc, Rect crop)
+        {
+            double imgW = Image.PixelWidth;
+            double imgH = Image.PixelHeight;
+            var mask = new SolidColorBrush(Color.FromArgb(150, 0, 0, 0));
+            mask.Freeze();
+            dc.DrawRectangle(mask, null, new Rect(0, 0, imgW, crop.Top));
+            dc.DrawRectangle(mask, null, new Rect(0, crop.Bottom, imgW, imgH - crop.Bottom));
+            dc.DrawRectangle(mask, null, new Rect(0, crop.Top, crop.Left, crop.Height));
+            dc.DrawRectangle(mask, null, new Rect(crop.Right, crop.Top, imgW - crop.Right, crop.Height));
+
+            double inv = _scale > 0 ? 1.0 / _scale : 1.0;
+            var borderPen = new Pen(Brushes.White, 1.5 * inv);
+            borderPen.Freeze();
+            dc.DrawRectangle(null, borderPen, crop);
+
+            var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(140, 255, 255, 255)), 1 * inv);
+            gridPen.Freeze();
+            for (int i = 1; i <= 2; i++)
+            {
+                double gx = crop.X + crop.Width * i / 3.0;
+                dc.DrawLine(gridPen, new Point(gx, crop.Top), new Point(gx, crop.Bottom));
+                double gy = crop.Y + crop.Height * i / 3.0;
+                dc.DrawLine(gridPen, new Point(crop.Left, gy), new Point(crop.Right, gy));
+            }
+
+            double hs = CropHandleScreenSize * inv;
+            var handleBrush = Brushes.White;
+            foreach (var hp in GetCropHandlePoints(crop))
+                dc.DrawRectangle(handleBrush, borderPen, new Rect(hp.X - hs / 2, hp.Y - hs / 2, hs, hs));
+        }
+
+        private static IEnumerable<Point> GetCropHandlePoints(Rect r)
+        {
+            yield return new Point(r.Left, r.Top);
+            yield return new Point(r.Right, r.Top);
+            yield return new Point(r.Left, r.Bottom);
+            yield return new Point(r.Right, r.Bottom);
+            yield return new Point(r.Left + r.Width / 2, r.Top);
+            yield return new Point(r.Left + r.Width / 2, r.Bottom);
+            yield return new Point(r.Left, r.Top + r.Height / 2);
+            yield return new Point(r.Right, r.Top + r.Height / 2);
         }
 
         private Point ToImagePoint(Point screenPoint)
@@ -171,6 +235,18 @@ namespace PicMark
             if (Image == null) return;
             Focus();
             var p = ToImagePoint(e.GetPosition(this));
+
+            if (CurrentTool == AnnotationTool.Select &&
+                _watermark != null &&
+                _watermark.Layout == WatermarkLayout.Single &&
+                _watermark.HitTestSingle(p, Image))
+            {
+                _isMovingSingleWatermark = true;
+                _watermarkDragStartImagePoint = p;
+                CaptureMouse();
+                e.Handled = true;
+                return;
+            }
 
             switch (CurrentTool)
             {
@@ -203,6 +279,20 @@ namespace PicMark
                     break;
                 case AnnotationTool.Text:
                     BeginTextAnnotation(p);
+                    e.Handled = true;
+                    break;
+                case AnnotationTool.Crop:
+                    if (_cropRect.HasValue)
+                    {
+                        var handle = HitTestCropHandle(p, _cropRect.Value);
+                        if (handle != CropHandle.None)
+                        {
+                            _cropDragHandle = handle;
+                            _cropDragStartImagePoint = p;
+                            _cropDragStartRect = _cropRect.Value;
+                            CaptureMouse();
+                        }
+                    }
                     e.Handled = true;
                     break;
                 case AnnotationTool.Select:
@@ -269,6 +359,119 @@ namespace PicMark
                 _dragStartImagePoint = p;
                 InvalidateVisual();
             }
+            else if (_isMovingSingleWatermark && _watermark != null)
+            {
+                Vector delta = p - _watermarkDragStartImagePoint;
+                _watermark.HorizontalOffset += delta.X;
+                _watermark.VerticalOffset += delta.Y;
+                _watermarkDragStartImagePoint = p;
+                InvalidateVisual();
+                WatermarkChanged?.Invoke(this, EventArgs.Empty);
+            }
+            else if (_cropDragHandle != CropHandle.None && _cropRect.HasValue)
+            {
+                Vector delta = p - _cropDragStartImagePoint;
+                _cropRect = ResizeCropRect(_cropDragStartRect, _cropDragHandle, delta);
+                InvalidateVisual();
+            }
+            else if (CurrentTool == AnnotationTool.Crop && _cropRect.HasValue)
+            {
+                Cursor = CursorForCropHandle(HitTestCropHandle(p, _cropRect.Value));
+            }
+        }
+
+        private CropHandle HitTestCropHandle(Point p, Rect crop)
+        {
+            double tol = Math.Max(6, CropHandleScreenSize) / Math.Max(0.05, Scale);
+            bool nearLeft = Math.Abs(p.X - crop.Left) <= tol;
+            bool nearRight = Math.Abs(p.X - crop.Right) <= tol;
+            bool nearTop = Math.Abs(p.Y - crop.Top) <= tol;
+            bool nearBottom = Math.Abs(p.Y - crop.Bottom) <= tol;
+            bool midX = Math.Abs(p.X - (crop.Left + crop.Width / 2)) <= tol && p.Y >= crop.Top - tol && p.Y <= crop.Bottom + tol;
+            bool midY = Math.Abs(p.Y - (crop.Top + crop.Height / 2)) <= tol && p.X >= crop.Left - tol && p.X <= crop.Right + tol;
+
+            if (nearLeft && nearTop) return CropHandle.NW;
+            if (nearRight && nearTop) return CropHandle.NE;
+            if (nearLeft && nearBottom) return CropHandle.SW;
+            if (nearRight && nearBottom) return CropHandle.SE;
+            if (nearTop && midX) return CropHandle.N;
+            if (nearBottom && midX) return CropHandle.S;
+            if (nearLeft && midY) return CropHandle.W;
+            if (nearRight && midY) return CropHandle.E;
+            if (crop.Contains(p)) return CropHandle.Move;
+            return CropHandle.None;
+        }
+
+        private static Cursor CursorForCropHandle(CropHandle handle)
+        {
+            switch (handle)
+            {
+                case CropHandle.N:
+                case CropHandle.S:
+                    return Cursors.SizeNS;
+                case CropHandle.E:
+                case CropHandle.W:
+                    return Cursors.SizeWE;
+                case CropHandle.NE:
+                case CropHandle.SW:
+                    return Cursors.SizeNESW;
+                case CropHandle.NW:
+                case CropHandle.SE:
+                    return Cursors.SizeNWSE;
+                case CropHandle.Move:
+                    return Cursors.SizeAll;
+                default:
+                    return Cursors.Cross;
+            }
+        }
+
+        private Rect ResizeCropRect(Rect start, CropHandle handle, Vector delta)
+        {
+            double imgW = Image.PixelWidth;
+            double imgH = Image.PixelHeight;
+
+            if (handle == CropHandle.Move)
+            {
+                double x = Math.Max(0, Math.Min(start.X + delta.X, imgW - start.Width));
+                double y = Math.Max(0, Math.Min(start.Y + delta.Y, imgH - start.Height));
+                return new Rect(x, y, start.Width, start.Height);
+            }
+
+            double left = start.Left, top = start.Top, right = start.Right, bottom = start.Bottom;
+            bool affectsLeft = handle == CropHandle.W || handle == CropHandle.NW || handle == CropHandle.SW;
+            bool affectsRight = handle == CropHandle.E || handle == CropHandle.NE || handle == CropHandle.SE;
+            bool affectsTop = handle == CropHandle.N || handle == CropHandle.NW || handle == CropHandle.NE;
+            bool affectsBottom = handle == CropHandle.S || handle == CropHandle.SW || handle == CropHandle.SE;
+
+            if (affectsLeft) left = Math.Max(0, Math.Min(left + delta.X, right - 8));
+            if (affectsRight) right = Math.Min(imgW, Math.Max(right + delta.X, left + 8));
+            if (affectsTop) top = Math.Max(0, Math.Min(top + delta.Y, bottom - 8));
+            if (affectsBottom) bottom = Math.Min(imgH, Math.Max(bottom + delta.Y, top + 8));
+
+            var result = new Rect(new Point(left, top), new Point(right, bottom));
+
+            if (_cropAspectRatio.HasValue)
+            {
+                double aspect = _cropAspectRatio.Value;
+                bool horizontalDrag = affectsLeft || affectsRight;
+                bool verticalDrag = affectsTop || affectsBottom;
+                if (horizontalDrag && !verticalDrag)
+                {
+                    double h = result.Width / aspect;
+                    double y = affectsTop ? result.Bottom - h : result.Top;
+                    y = Math.Max(0, Math.Min(y, imgH - h));
+                    result = new Rect(result.X, y, result.Width, Math.Min(h, imgH - y));
+                }
+                else
+                {
+                    double w = result.Height * aspect;
+                    double x = affectsLeft ? result.Right - w : result.Left;
+                    x = Math.Max(0, Math.Min(x, imgW - w));
+                    result = new Rect(x, result.Y, Math.Min(w, imgW - x), result.Height);
+                }
+            }
+
+            return result;
         }
 
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -296,6 +499,18 @@ namespace PicMark
                 _selectionMoved = false;
                 ReleaseMouseCapture();
                 if (moved) AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+            }
+            else if (_isMovingSingleWatermark)
+            {
+                _isMovingSingleWatermark = false;
+                ReleaseMouseCapture();
+                AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+                WatermarkChanged?.Invoke(this, EventArgs.Empty);
+            }
+            else if (_cropDragHandle != CropHandle.None)
+            {
+                _cropDragHandle = CropHandle.None;
+                ReleaseMouseCapture();
             }
         }
 
@@ -780,10 +995,88 @@ namespace PicMark
             dc.DrawText(ft, _editingText.Location);
         }
 
+        public void BeginCrop()
+        {
+            if (Image == null) return;
+            double marginX = Image.PixelWidth * 0.08;
+            double marginY = Image.PixelHeight * 0.08;
+            var rect = new Rect(marginX, marginY, Image.PixelWidth - marginX * 2, Image.PixelHeight - marginY * 2);
+            _cropRect = _cropAspectRatio.HasValue ? FitAspect(rect, _cropAspectRatio.Value) : rect;
+            InvalidateVisual();
+        }
+
+        public void CancelCrop()
+        {
+            if (_cropRect == null) return;
+            _cropRect = null;
+            _cropDragHandle = CropHandle.None;
+            Cursor = null;
+            InvalidateVisual();
+        }
+
+        public void SetCropAspectRatio(double? ratio)
+        {
+            _cropAspectRatio = ratio;
+            if (_cropRect.HasValue && ratio.HasValue)
+            {
+                _cropRect = FitAspect(_cropRect.Value, ratio.Value);
+                InvalidateVisual();
+            }
+        }
+
+        private Rect FitAspect(Rect bounds, double aspect)
+        {
+            double imgW = Image?.PixelWidth ?? bounds.Right;
+            double imgH = Image?.PixelHeight ?? bounds.Bottom;
+            var center = new Point(bounds.X + bounds.Width / 2, bounds.Y + bounds.Height / 2);
+            double width = bounds.Width;
+            double height = width / aspect;
+            if (height > bounds.Height)
+            {
+                height = bounds.Height;
+                width = height * aspect;
+            }
+            double x = Math.Max(0, Math.Min(center.X - width / 2, imgW - width));
+            double y = Math.Max(0, Math.Min(center.Y - height / 2, imgH - height));
+            width = Math.Min(width, imgW - x);
+            height = Math.Min(height, imgH - y);
+            return new Rect(x, y, width, height);
+        }
+
+        public void ConfirmCrop()
+        {
+            if (Image == null || !_cropRect.HasValue) return;
+            Rect r = NormalizeRect(_cropRect.Value);
+            int x = (int)Math.Round(Math.Max(0, r.X));
+            int y = (int)Math.Round(Math.Max(0, r.Y));
+            int w = (int)Math.Round(Math.Min(r.Width, Image.PixelWidth - x));
+            int h = (int)Math.Round(Math.Min(r.Height, Image.PixelHeight - y));
+            if (w < 8 || h < 8)
+            {
+                CancelCrop();
+                return;
+            }
+
+            PushUndo();
+            var cropped = new CroppedBitmap(Image, new Int32Rect(x, y, w, h));
+            cropped.Freeze();
+            var offset = new Vector(-x, -y);
+            foreach (var a in Annotations) a.Move(offset);
+            Image = cropped;
+            _cropRect = null;
+            _cropDragHandle = CropHandle.None;
+            Cursor = null;
+            SetSelected(null);
+            InvalidateVisual();
+            AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
         public void ClearAll()
         {
             _beautifyTimer.Stop();
             Annotations.Clear();
+            _watermark = null;
+            _isMovingSingleWatermark = false;
             SetSelected(null);
             _drawing = null;
             _isMovingSelection = false;
@@ -792,30 +1085,47 @@ namespace PicMark
             _editingTextWasNew = false;
             _editingOriginalText = null;
             RemoveTextEditor();
+            _cropRect = null;
+            _cropDragHandle = CropHandle.None;
+            Cursor = null;
             _undo.Clear();
             InvalidateVisual();
         }
 
-        private void PushUndo() => _undo.PushState(Annotations);
+        public void SetWatermark(WatermarkSettings settings, bool notifyChanged = true)
+        {
+            _watermark = settings?.Clone();
+            InvalidateVisual();
+            WatermarkChanged?.Invoke(this, EventArgs.Empty);
+            if (notifyChanged)
+                AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public WatermarkSettings GetWatermark() => _watermark?.Clone();
+
+        private void PushUndo() => _undo.PushState(Image, Annotations);
 
         public void Undo()
         {
-            var state = _undo.Undo(Annotations);
-            if (state != null) ReplaceAnnotations(state);
+            var state = _undo.Undo(Image, Annotations);
+            if (state != null) ReplaceState(state);
         }
 
         public void Redo()
         {
-            var state = _undo.Redo(Annotations);
-            if (state != null) ReplaceAnnotations(state);
+            var state = _undo.Redo(Image, Annotations);
+            if (state != null) ReplaceState(state);
         }
 
-        private void ReplaceAnnotations(List<Annotation> state)
+        private void ReplaceState(UndoManager.CanvasState state)
         {
+            if (!ReferenceEquals(Image, state.Image))
+                Image = state.Image;
             Annotations.Clear();
-            Annotations.AddRange(state);
+            Annotations.AddRange(state.Annotations);
             RemoveTextEditor();
             _editingText = null;
+            CancelCrop();
             SetSelected(null);
             InvalidateVisual();
             AnnotationsChanged?.Invoke(this, EventArgs.Empty);
@@ -839,6 +1149,7 @@ namespace PicMark
                 var snapshot = Annotations.ToArray();
                 foreach (var a in snapshot)
                     a.Draw(dc, false, Image);
+                _watermark?.Draw(dc, Image);
             }
             var rtb = new RenderTargetBitmap(Image.PixelWidth, Image.PixelHeight, 96, 96, PixelFormats.Pbgra32);
             rtb.Render(visual);

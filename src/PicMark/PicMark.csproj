@@ -80,6 +80,8 @@
     </Compile>
     <Compile Include="AppDialog.cs" />
     <Compile Include="Win7Helper.cs" />
+    <Compile Include="WatermarkOverwriteDialog.cs" />
+    <Compile Include="WatermarkSettings.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -104,6 +106,23 @@
       <DependentUpon>SaveOptionsDialog.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="BatchCropWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="BatchCropWindow.xaml.cs">
+      <DependentUpon>BatchCropWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="BatchCropPresetNameDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="BatchCropPresetNameDialog.xaml.cs">
+      <DependentUpon>BatchCropPresetNameDialog.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="BatchCropPreset.cs" />
     <Compile Include="AnnotationCanvas.cs" />
     <Compile Include="Annotations.cs" />
     <Compile Include="UndoManager.cs" />

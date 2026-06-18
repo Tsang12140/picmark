@@ -735,7 +735,167 @@
                                     <TextBlock Style="{StaticResource PanelToolLabel}" Text="马赛克"/>
                                 </StackPanel>
                             </Button>
+                            <Button x:Name="PanelBtnWatermark" Style="{StaticResource PanelToolButton}" Click="BtnWatermark_Click" ToolTip="满屏水印">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 4 7 L 20 7 M 4 12 L 20 12 M 4 17 L 20 17"/>
+                                            <Path Style="{StaticResource PanelToolIcon}" StrokeDashArray="2 2" Data="M 7 4 L 17 20 M 17 4 L 7 20"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="水印"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="PanelBtnCrop" Style="{StaticResource PanelToolButton}" Tag="Crop" Click="ToolButton_Click" ToolTip="裁剪">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 7 3 L 7 17 L 21 17 M 17 7 L 17 21 L 3 21"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="裁剪"/>
+                                </StackPanel>
+                            </Button>
                         </UniformGrid>
+
+                        <Border x:Name="CropPanel" Visibility="Collapsed" Background="#FF323232"
+                                BorderBrush="#FF505050" BorderThickness="1" CornerRadius="7"
+                                Padding="12" Margin="0,0,0,10">
+                            <StackPanel>
+                                <TextBlock Text="裁剪" Foreground="White" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"/>
+
+                                <TextBlock Text="比例" Style="{StaticResource SectionLabel}"/>
+                                <UniformGrid Columns="3" Margin="0,0,0,8">
+                                    <Button x:Name="CropFreeBtn" Style="{StaticResource ToolButton}" Height="32" Margin="2" Tag="Free" Click="CropAspect_Click"><TextBlock Text="自由"/></Button>
+                                    <Button x:Name="CropSquareBtn" Style="{StaticResource ToolButton}" Height="32" Margin="2" Tag="1:1" Click="CropAspect_Click"><TextBlock Text="1:1"/></Button>
+                                    <Button x:Name="Crop43Btn" Style="{StaticResource ToolButton}" Height="32" Margin="2" Tag="4:3" Click="CropAspect_Click"><TextBlock Text="4:3"/></Button>
+                                    <Button x:Name="Crop34Btn" Style="{StaticResource ToolButton}" Height="32" Margin="2" Tag="3:4" Click="CropAspect_Click"><TextBlock Text="3:4"/></Button>
+                                    <Button x:Name="Crop169Btn" Style="{StaticResource ToolButton}" Height="32" Margin="2" Tag="16:9" Click="CropAspect_Click"><TextBlock Text="16:9"/></Button>
+                                    <Button x:Name="Crop916Btn" Style="{StaticResource ToolButton}" Height="32" Margin="2" Tag="9:16" Click="CropAspect_Click"><TextBlock Text="9:16"/></Button>
+                                </UniformGrid>
+
+                                <TextBlock Text="拖动边角调整范围，Enter 确认 / Esc 取消" Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,10"/>
+
+                                <UniformGrid Columns="2">
+                                    <Button Style="{StaticResource PrimaryButton}" Height="36" Margin="0,0,6,0" Click="BtnCropConfirm_Click"><TextBlock Text="确认裁剪"/></Button>
+                                    <Button Style="{StaticResource ToolButton}" Height="36" Margin="6,0,0,0" Click="BtnCropCancel_Click"><TextBlock Text="取消"/></Button>
+                                </UniformGrid>
+
+                                <Button Style="{StaticResource ToolButton}" Height="32" Margin="0,10,0,0" Click="BtnBatchCrop_Click">
+                                    <TextBlock Text="水印批量裁切"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <Border x:Name="WatermarkPanel" Visibility="Collapsed" Background="#FF323232"
+                                BorderBrush="#FF505050" BorderThickness="1" CornerRadius="7"
+                                Padding="12" Margin="0,0,0,10">
+                            <StackPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <TextBlock Text="满屏水印" Foreground="White" FontSize="15" FontWeight="Bold"/>
+                                    <Button HorizontalAlignment="Right" Style="{StaticResource ToolButton}" Width="28" Height="26"
+                                            Click="BtnCloseWatermarkPanel_Click" ToolTip="收起">
+                                        <TextBlock Text="×" FontSize="16"/>
+                                    </Button>
+                                </Grid>
+
+                                <TextBlock Text="选择样式" Style="{StaticResource SectionLabel}" Margin="0,0,0,6"/>
+                                <UniformGrid Columns="3" Margin="-3,0,-3,2">
+                                    <Button x:Name="WatermarkGridCard" Style="{StaticResource ToolButton}" Height="78"
+                                            Margin="3" Padding="4" Tag="CertificateGrid" Click="WatermarkTemplate_Click">
+                                        <StackPanel>
+                                            <Viewbox Width="44" Height="38">
+                                                <Canvas Width="60" Height="46">
+                                                    <Path Stroke="#FFB9BEC7" StrokeThickness="1" StrokeDashArray="3 2"
+                                                          Data="M 30 2 L 57 23 L 30 44 L 3 23 Z"/>
+                                                    <TextBlock Canvas.Left="13" Canvas.Top="17" Text="仅用于" FontSize="9" Foreground="#FFF4F4F5"/>
+                                                </Canvas>
+                                            </Viewbox>
+                                            <TextBlock Text="证件网格" FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="WatermarkTiledCard" Style="{StaticResource ToolButton}" Height="78"
+                                            Margin="3" Padding="4" Tag="TiledText" Click="WatermarkTemplate_Click">
+                                        <StackPanel>
+                                            <Viewbox Width="44" Height="38">
+                                                <Canvas Width="60" Height="46">
+                                                    <TextBlock Canvas.Left="2" Canvas.Top="3" Text="水印  水印" FontSize="8" Foreground="#FFB9BEC7" RenderTransformOrigin=".5,.5"><TextBlock.RenderTransform><RotateTransform Angle="-20"/></TextBlock.RenderTransform></TextBlock>
+                                                    <TextBlock Canvas.Left="8" Canvas.Top="23" Text="水印  水印" FontSize="8" Foreground="#FFB9BEC7" RenderTransformOrigin=".5,.5"><TextBlock.RenderTransform><RotateTransform Angle="-20"/></TextBlock.RenderTransform></TextBlock>
+                                                </Canvas>
+                                            </Viewbox>
+                                            <TextBlock Text="文字平铺" FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button x:Name="WatermarkSingleCard" Style="{StaticResource ToolButton}" Height="78"
+                                            Margin="3" Padding="4" Tag="SingleText" Click="WatermarkTemplate_Click">
+                                        <StackPanel>
+                                            <Viewbox Width="44" Height="38">
+                                                <Canvas Width="60" Height="46">
+                                                    <Border Canvas.Left="7" Canvas.Top="11" Width="46" Height="24"
+                                                            BorderBrush="#FFB9BEC7" BorderThickness="1" CornerRadius="3">
+                                                        <TextBlock Text="单个水印" FontSize="8" Foreground="#FFF4F4F5" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </Canvas>
+                                            </Viewbox>
+                                            <TextBlock Text="单个文字" FontSize="11" HorizontalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
+                                </UniformGrid>
+
+                                <StackPanel x:Name="WatermarkParametersPanel" Visibility="Collapsed">
+                                    <TextBlock Text="水印文字（可按 Enter 手动分行）" Style="{StaticResource SectionLabel}"/>
+                                    <TextBox x:Name="WatermarkTextBox" Height="72" MaxLength="120"
+                                             AcceptsReturn="True" TextWrapping="Wrap"
+                                             Background="#FF2E2E2E" Foreground="White" BorderBrush="#FF606060"
+                                             VerticalScrollBarVisibility="Auto" Padding="8,6"
+                                             TextChanged="WatermarkOption_Changed"/>
+
+                                    <TextBlock Text="字体" Style="{StaticResource SectionLabel}"/>
+                                    <UniformGrid Columns="4">
+                                        <Button x:Name="WatermarkFontYaHeiBtn" Style="{StaticResource ToolButton}" Height="32" Padding="3" Tag="Microsoft YaHei UI" Click="WatermarkFont_Click"><TextBlock Text="雅黑" FontSize="11"/></Button>
+                                        <Button x:Name="WatermarkFontSimSunBtn" Style="{StaticResource ToolButton}" Height="32" Padding="3" Tag="SimSun" Click="WatermarkFont_Click"><TextBlock Text="宋体" FontSize="11"/></Button>
+                                        <Button x:Name="WatermarkFontSimHeiBtn" Style="{StaticResource ToolButton}" Height="32" Padding="3" Tag="SimHei" Click="WatermarkFont_Click"><TextBlock Text="黑体" FontSize="11"/></Button>
+                                        <Button x:Name="WatermarkFontKaiTiBtn" Style="{StaticResource ToolButton}" Height="32" Padding="3" Tag="KaiTi" Click="WatermarkFont_Click"><TextBlock Text="楷体" FontSize="11"/></Button>
+                                    </UniformGrid>
+
+                                    <Grid Margin="0,10,0,3">
+                                        <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="字号" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="WatermarkFontSizeValue" Grid.Column="1" Foreground="White" TextAlignment="Right" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="2" Style="{StaticResource ToolButton}" Height="26" MinWidth="0" Padding="2" Margin="6,0,0,0" Tag="FontSize" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button>
+                                    </Grid>
+                                    <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/></Grid.ColumnDefinitions><Slider x:Name="WatermarkFontSizeSlider" Minimum="12" Maximum="72" Value="28" TickFrequency="2" IsSnapToTickEnabled="True" ValueChanged="WatermarkOption_Changed"/><Button x:Name="WatermarkBoldBtn" Grid.Column="1" Style="{StaticResource ToolButton}" Height="32" Margin="8,0,0,0" Click="WatermarkBold_Click"><TextBlock Text="B" FontWeight="Bold" FontSize="16"/></Button></Grid>
+
+                                    <Grid Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="不透明度" Foreground="{StaticResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkOpacityValue" Grid.Column="1" Foreground="White" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource ToolButton}" Height="26" MinWidth="0" Padding="2" Margin="6,0,0,0" Tag="Opacity" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
+                                    <Slider x:Name="WatermarkOpacitySlider" Minimum="5" Maximum="60" Value="20" TickFrequency="5" ValueChanged="WatermarkOption_Changed"/>
+
+                                    <Grid Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="角度" Foreground="{StaticResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkAngleValue" Grid.Column="1" Foreground="White" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource ToolButton}" Height="26" MinWidth="0" Padding="2" Margin="6,0,0,0" Tag="Angle" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
+                                    <Slider x:Name="WatermarkAngleSlider" Minimum="-90" Maximum="90" Value="0" TickFrequency="1" ValueChanged="WatermarkOption_Changed"/>
+
+                                    <Grid x:Name="WatermarkSpacingHeader" Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="间距（密度）" Foreground="{StaticResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkSpacingValue" Grid.Column="1" Foreground="White" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource ToolButton}" Height="26" MinWidth="0" Padding="2" Margin="6,0,0,0" Tag="Spacing" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
+                                    <Slider x:Name="WatermarkSpacingSlider" Minimum="80" Maximum="400" Value="204" TickFrequency="4" IsSnapToTickEnabled="True" ValueChanged="WatermarkOption_Changed"/>
+
+                                    <Grid Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="整体左右移动" Foreground="{StaticResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkOffsetValue" Grid.Column="1" Foreground="White" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource ToolButton}" Height="26" MinWidth="0" Padding="2" Margin="6,0,0,0" Tag="Offset" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
+                                    <Slider x:Name="WatermarkOffsetSlider" Minimum="-400" Maximum="400" Value="0" TickFrequency="1" ValueChanged="WatermarkOption_Changed"/>
+
+                                    <TextBlock x:Name="SingleWatermarkHint" Text="可直接在图片上按住水印拖动位置" Visibility="Collapsed"
+                                               Margin="2,8,0,0" Foreground="#FF9EA8FF" FontSize="12"/>
+                                    <Button x:Name="ResetSinglePositionBtn" Visibility="Collapsed" Style="{StaticResource ToolButton}" Height="30" Margin="0,6,0,0"
+                                            Click="ResetSinglePosition_Click"><TextBlock Text="水印回到图片正中"/></Button>
+
+                                    <TextBlock Text="颜色" Style="{StaticResource SectionLabel}"/>
+                                    <WrapPanel>
+                                        <Button Style="{StaticResource ColorSwatch}" Background="Black" Tag="Black" Click="WatermarkColor_Click"/>
+                                        <Button Style="{StaticResource ColorSwatch}" Background="White" BorderBrush="#FFCCCCCC" Tag="White" Click="WatermarkColor_Click"/>
+                                        <Button Style="{StaticResource ColorSwatch}" Background="#FFEA4335" Tag="Red" Click="WatermarkColor_Click"/>
+                                        <Button Style="{StaticResource ColorSwatch}" Background="#FF5C8D89" Tag="Teal" Click="WatermarkColor_Click"/>
+                                    </WrapPanel>
+
+                                    <Button Style="{StaticResource ToolButton}" Height="34" Margin="0,12,0,0"
+                                            Click="BtnRemoveWatermark_Click"><TextBlock Text="移除水印"/></Button>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
 
                         <TextBlock Text="颜色" Style="{StaticResource SectionLabel}"/>
                         <WrapPanel>
