@@ -1,4 +1,4 @@
-; 见微 PicMark 安装脚本
+﻿; 见微 PicMark 安装脚本
 ; 用 Inno Setup (https://jrsoftware.org/isinfo.php) 编译: ISCC.exe PicMark.iss
 ;
 ; 运行库策略：
@@ -33,7 +33,7 @@ WizardStyle=modern
 MinVersion=6.1sp1
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务："
