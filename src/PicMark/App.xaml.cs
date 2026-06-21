@@ -1,4 +1,7 @@
+using System;
+using System.Linq;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace PicMark
 {
@@ -8,7 +11,14 @@ namespace PicMark
         {
             var window = new MainWindow();
             window.Show();
-            window.OpenInitialFiles(e.Args);
+            window.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var args = Environment.GetCommandLineArgs()
+                    .Skip(1)
+                    .Concat(e.Args ?? new string[0])
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
+                window.OpenInitialFiles(args);
+            }), DispatcherPriority.ApplicationIdle);
         }
     }
 }

@@ -1,16 +1,24 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Windows.Media.Imaging;
 
 namespace PicMark
 {
     public class UndoManager
     {
-        private readonly Stack<List<Annotation>> _undoStack = new Stack<List<Annotation>>();
-        private readonly Stack<List<Annotation>> _redoStack = new Stack<List<Annotation>>();
-
-        public void PushState(List<Annotation> current)
+        public class CanvasState
         {
-            _undoStack.Push(Clone(current));
+            public BitmapSource Image;
+            public List<Annotation> Annotations;
+            public WatermarkSettings Watermark;
+        }
+
+        private readonly Stack<CanvasState> _undoStack = new Stack<CanvasState>();
+        private readonly Stack<CanvasState> _redoStack = new Stack<CanvasState>();
+
+        public void PushState(BitmapSource image, List<Annotation> current, WatermarkSettings watermark)
+        {
+            _undoStack.Push(new CanvasState { Image = image, Annotations = Clone(current), Watermark = watermark?.Clone() });
             _redoStack.Clear();
         }
 
@@ -20,17 +28,17 @@ namespace PicMark
             _redoStack.Clear();
         }
 
-        public List<Annotation> Undo(List<Annotation> current)
+        public CanvasState Undo(BitmapSource currentImage, List<Annotation> current, WatermarkSettings currentWatermark)
         {
             if (_undoStack.Count == 0) return null;
-            _redoStack.Push(Clone(current));
+            _redoStack.Push(new CanvasState { Image = currentImage, Annotations = Clone(current), Watermark = currentWatermark?.Clone() });
             return _undoStack.Pop();
         }
 
-        public List<Annotation> Redo(List<Annotation> current)
+        public CanvasState Redo(BitmapSource currentImage, List<Annotation> current, WatermarkSettings currentWatermark)
         {
             if (_redoStack.Count == 0) return null;
-            _undoStack.Push(Clone(current));
+            _undoStack.Push(new CanvasState { Image = currentImage, Annotations = Clone(current), Watermark = currentWatermark?.Clone() });
             return _redoStack.Pop();
         }
 

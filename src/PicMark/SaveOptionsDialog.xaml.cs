@@ -72,7 +72,7 @@ namespace PicMark
         {
             ext = (ext ?? ".png").ToLowerInvariant();
             if (ext == ".jpeg") return ".jpg";
-            return ext == ".jpg" || ext == ".bmp" ? ext : ".png";
+            return ext == ".jpg" || ext == ".bmp" || ext == ".webp" ? ext : ".png";
         }
 
         private void SizeBox_TextChanged(object sender, TextChangedEventArgs e)
@@ -189,13 +189,21 @@ namespace PicMark
             if (PreviewInfoText == null) return;
             string ext = ExtCombo?.SelectedItem is ComboBoxItem ? GetSelectedExtension() : ".png";
             string sizeText = $"{WidthBox?.Text ?? _sourceWidth.ToString()} × {HeightBox?.Text ?? _sourceHeight.ToString()}";
-            string qualityText = ext == ".jpg" ? $"，质量 {GetSelectedQuality()}%" : string.Empty;
+            string qualityText = ext == ".jpg" || ext == ".webp" ? $"，质量 {GetSelectedQuality()}%" : string.Empty;
             string targetText = GetTargetBytes() is long bytes ? $"，目标约 {bytes / 1024.0:0.#} KB" : string.Empty;
             PreviewInfoText.Text = $"{sizeText}{qualityText}{targetText}";
             if (EstimateText != null)
-                EstimateText.Text = ext == ".jpg"
-                    ? "JPG 会优先通过质量压缩控制体积；PNG/BMP 更适合无损保存，若设置目标体积会优先缩小尺寸。"
-                    : "PNG/BMP 以画质为先；需要明显压缩体积时建议切换为 JPG。";
+            {
+                bool resized = int.TryParse(WidthBox?.Text, out int width) &&
+                    int.TryParse(HeightBox?.Text, out int height) &&
+                    (width != _sourceWidth || height != _sourceHeight);
+                string resizeNote = resized
+                    ? "当前尺寸不是原图尺寸，会重新缩放整张图。"
+                    : "当前保持原图分辨率。";
+                EstimateText.Text = ext == ".jpg" || ext == ".webp"
+                    ? $"JPG/WebP 适合小体积分享，但会重新编码，不能做到严格无损。{resizeNote}"
+                    : $"PNG/BMP 是无损保存，适合保留原图画质和精确标注。{resizeNote}";
+            }
         }
     }
 }

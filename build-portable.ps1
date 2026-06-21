@@ -91,6 +91,17 @@ foreach ($arch in @("x64", "x86", "arm64")) {
     }
 }
 
+$PortableToolsDir = Join-Path $ProjectRoot "installer\portable"
+$LicensePath = Join-Path $ProjectRoot "LICENSE"
+if (Test-Path $LicensePath) {
+    Copy-Item $LicensePath (Join-Path $PortableDir "LICENSE.txt") -Force
+    Write-Host "  LICENSE.txt" -ForegroundColor Gray
+}
+if (Test-Path $PortableToolsDir) {
+    Copy-Item (Join-Path $PortableToolsDir "*") $PortableDir -Force
+    Write-Host "  注册打开方式脚本" -ForegroundColor Gray
+}
+
 Write-Host "  便携版已就绪" -ForegroundColor Green
 
 # 4. 启动预览

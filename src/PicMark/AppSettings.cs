@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Windows;
 
 namespace PicMark
@@ -23,6 +24,11 @@ namespace PicMark
         public string Thickness { get; set; } = "9";
         public string FontSize { get; set; } = "36";
         public int HistoryCacheMb { get; set; } = 500;
+        public int WatermarkAssetLimit { get; set; } = 12;
+        public string WatermarkTemplate { get; set; } = "CertificateGrid";
+        public string RecentContextAction { get; set; } = string.Empty;
+        public List<string> RecentFiles { get; } = new List<string>();
+        public List<string> WatermarkLogoAssets { get; } = new List<string>();
 
         public static AppSettings Load()
         {
@@ -65,7 +71,12 @@ namespace PicMark
                 "Color=" + Color,
                 "Thickness=" + Thickness,
                 "FontSize=" + FontSize,
-                "HistoryCacheMb=" + HistoryCacheMb
+                "HistoryCacheMb=" + HistoryCacheMb,
+                "WatermarkAssetLimit=" + WatermarkAssetLimit,
+                "WatermarkTemplate=" + WatermarkTemplate,
+                "RecentContextAction=" + RecentContextAction,
+                "RecentFiles=" + string.Join("|", RecentFiles.Select(Uri.EscapeDataString)),
+                "WatermarkLogoAssets=" + string.Join("|", WatermarkLogoAssets.Select(Uri.EscapeDataString))
             };
             File.WriteAllLines(SettingsPath, lines);
             }
@@ -91,6 +102,25 @@ namespace PicMark
                 case "Thickness": Thickness = value; break;
                 case "FontSize": FontSize = value; break;
                 case "HistoryCacheMb": HistoryCacheMb = ParseInt(value, HistoryCacheMb); break;
+                case "WatermarkAssetLimit": WatermarkAssetLimit = Math.Max(1, ParseInt(value, WatermarkAssetLimit)); break;
+                case "WatermarkTemplate": WatermarkTemplate = value; break;
+                case "RecentContextAction": RecentContextAction = value ?? string.Empty; break;
+                case "RecentFiles":
+                    RecentFiles.Clear();
+                    foreach (string item in value.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string path = Uri.UnescapeDataString(item);
+                        if (!string.IsNullOrWhiteSpace(path)) RecentFiles.Add(path);
+                    }
+                    break;
+                case "WatermarkLogoAssets":
+                    WatermarkLogoAssets.Clear();
+                    foreach (string item in value.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string path = Uri.UnescapeDataString(item);
+                        if (!string.IsNullOrWhiteSpace(path)) WatermarkLogoAssets.Add(path);
+                    }
+                    break;
             }
         }
 

@@ -3,8 +3,10 @@ using System.Resources;
 using System.Windows;
 
 [assembly: AssemblyTitle("PicMark")]
-[assembly: AssemblyDescription("简单易用的图片标注工具（画框/画圈/加字），不损失原图画质")]
+[assembly: AssemblyDescription("本地优先的轻量图片查看与标注工具")]
 [assembly: AssemblyProduct("PicMark")]
+[assembly: AssemblyCompany("Tsang12140")]
+[assembly: AssemblyCopyright("Copyright © 2026 Tsang12140")]
 [assembly: AssemblyVersion("0.1.0.0")]
 [assembly: AssemblyFileVersion("0.1.0.0")]
 [assembly: NeutralResourcesLanguage("zh-CN")]

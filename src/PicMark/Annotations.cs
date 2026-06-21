@@ -11,7 +11,7 @@ namespace PicMark
     internal static class AnnotationConstants
     {
         // 字体族包含 Win7 通用回退：阿里巴巴普惠体 → 微软雅黑 → 黑体
-        public const string DefaultFontFamily = "Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, sans-serif";
+        public const string DefaultFontFamily = "Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei";
     }
 
     public enum MosaicMode
@@ -66,6 +66,158 @@ namespace PicMark
         public override Annotation Clone() => new RectAnnotation { Bounds = Bounds, StrokeColor = StrokeColor, Thickness = Thickness };
     }
 
+    public class OrganicRectAnnotation : Annotation
+    {
+        public Rect Bounds { get; set; }
+        public List<Point> Points { get; } = new List<Point>();
+        private StreamGeometry _geometry;
+
+        public override Rect GetBounds() => Bounds;
+
+        public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
+        {
+            if (Points.Count < 4) return;
+            var brush = new SolidColorBrush(StrokeColor);
+            brush.Freeze();
+            var pen = new Pen(brush, Thickness)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round
+            };
+            pen.Freeze();
+            dc.DrawGeometry(null, pen, GetGeometry());
+            if (selected) DrawSelectionAdorner(dc, Bounds);
+        }
+
+        private StreamGeometry GetGeometry()
+        {
+            if (_geometry != null) return _geometry;
+
+            var geometry = new StreamGeometry();
+            using (var context = geometry.Open())
+            {
+                Point start = Midpoint(Points[Points.Count - 1], Points[0]);
+                context.BeginFigure(start, false, true);
+                for (int i = 0; i < Points.Count; i++)
+                {
+                    Point next = Points[(i + 1) % Points.Count];
+                    context.QuadraticBezierTo(Points[i], Midpoint(Points[i], next), true, false);
+                }
+            }
+            geometry.Freeze();
+            _geometry = geometry;
+            return geometry;
+        }
+
+        private static Point Midpoint(Point a, Point b) =>
+            new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
+
+        public override void Move(Vector delta)
+        {
+            Bounds = new Rect(Bounds.TopLeft + delta, Bounds.Size);
+            for (int i = 0; i < Points.Count; i++) Points[i] += delta;
+            _geometry = null;
+        }
+
+        public override Annotation Clone()
+        {
+            var clone = new OrganicRectAnnotation
+            {
+                Bounds = Bounds,
+                StrokeColor = StrokeColor,
+                Thickness = Thickness
+            };
+            clone.Points.AddRange(Points);
+            return clone;
+        }
+    }
+
+    public class OrganicPolygonAnnotation : Annotation
+    {
+        public List<Point> Vertices { get; } = new List<Point>();
+        private StreamGeometry _geometry;
+
+        public override Rect GetBounds()
+        {
+            if (Vertices.Count == 0) return Rect.Empty;
+            double left = Vertices.Min(point => point.X);
+            double top = Vertices.Min(point => point.Y);
+            double right = Vertices.Max(point => point.X);
+            double bottom = Vertices.Max(point => point.Y);
+            return new Rect(new Point(left, top), new Point(right, bottom));
+        }
+
+        public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
+        {
+            if (Vertices.Count < 3) return;
+            var brush = new SolidColorBrush(StrokeColor);
+            brush.Freeze();
+            var pen = new Pen(brush, Thickness)
+            {
+                StartLineCap = PenLineCap.Round,
+                EndLineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round
+            };
+            pen.Freeze();
+            dc.DrawGeometry(null, pen, GetGeometry());
+            if (selected) DrawSelectionAdorner(dc, GetBounds());
+        }
+
+        private StreamGeometry GetGeometry()
+        {
+            if (_geometry != null) return _geometry;
+            int count = Vertices.Count;
+            var before = new Point[count];
+            var after = new Point[count];
+
+            for (int i = 0; i < count; i++)
+            {
+                Point previous = Vertices[(i - 1 + count) % count];
+                Point current = Vertices[i];
+                Point next = Vertices[(i + 1) % count];
+                Vector incoming = previous - current;
+                Vector outgoing = next - current;
+                double radius = Math.Min(incoming.Length, outgoing.Length) * 0.085;
+                if (incoming.Length > 0) incoming.Normalize();
+                if (outgoing.Length > 0) outgoing.Normalize();
+                before[i] = current + incoming * radius;
+                after[i] = current + outgoing * radius;
+            }
+
+            var geometry = new StreamGeometry();
+            using (var context = geometry.Open())
+            {
+                context.BeginFigure(after[count - 1], false, true);
+                for (int i = 0; i < count; i++)
+                {
+                    context.LineTo(before[i], true, false);
+                    context.QuadraticBezierTo(Vertices[i], after[i], true, false);
+                }
+            }
+            geometry.Freeze();
+            _geometry = geometry;
+            return geometry;
+        }
+
+        public override void Move(Vector delta)
+        {
+            for (int i = 0; i < Vertices.Count; i++) Vertices[i] += delta;
+            _geometry = null;
+        }
+
+        public override Annotation Clone()
+        {
+            var clone = new OrganicPolygonAnnotation
+            {
+                StrokeColor = StrokeColor,
+                Thickness = Thickness
+            };
+            clone.Vertices.AddRange(Vertices);
+            return clone;
+        }
+    }
+
     public class EllipseAnnotation : Annotation
     {
         public Rect Bounds { get; set; }
@@ -84,6 +236,107 @@ namespace PicMark
         public override void Move(Vector delta) => Bounds = new Rect(Bounds.TopLeft + delta, Bounds.Size);
 
         public override Annotation Clone() => new EllipseAnnotation { Bounds = Bounds, StrokeColor = StrokeColor, Thickness = Thickness };
+    }
+
+    public class OpenEllipseAnnotation : Annotation
+    {
+        public Rect Bounds { get; set; }
+        public double StartAngle { get; set; }
+        public double SweepAngle { get; set; }
+        public List<Point> Points { get; } = new List<Point>();
+
+        public override Rect GetBounds() => Bounds;
+
+        public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
+        {
+            if (Bounds.Width <= 0 || Bounds.Height <= 0) return;
+            var contour = Points.Count >= 2 ? Points : BuildFallbackPoints();
+            if (contour.Count < 2) return;
+
+            var brush = new SolidColorBrush(StrokeColor);
+            brush.Freeze();
+            int taperSegments = Math.Min(9, Math.Max(3, contour.Count / 8));
+            int bodyStart = taperSegments;
+            int bodyEnd = contour.Count - taperSegments - 1;
+
+            if (bodyEnd > bodyStart)
+            {
+                var bodyPen = new Pen(brush, Thickness)
+                {
+                    StartLineCap = PenLineCap.Round,
+                    EndLineCap = PenLineCap.Round,
+                    LineJoin = PenLineJoin.Round
+                };
+                bodyPen.Freeze();
+                var body = new StreamGeometry();
+                using (var context = body.Open())
+                {
+                    context.BeginFigure(contour[bodyStart], false, false);
+                    for (int i = bodyStart + 1; i <= bodyEnd; i++)
+                        context.LineTo(contour[i], true, false);
+                }
+                body.Freeze();
+                dc.DrawGeometry(null, bodyPen, body);
+            }
+
+            DrawTaper(dc, brush, contour, 0, taperSegments, true);
+            DrawTaper(dc, brush, contour, contour.Count - taperSegments - 1, contour.Count - 1, false);
+            if (selected) DrawSelectionAdorner(dc, Bounds);
+        }
+
+        private void DrawTaper(DrawingContext dc, Brush brush, IList<Point> contour, int from, int to, bool grow)
+        {
+            int count = Math.Max(1, to - from);
+            for (int i = from; i < to; i++)
+            {
+                double progress = (i - from + 1.0) / count;
+                double factor = grow ? progress : 1.0 - (i - from) / (double)count;
+                factor = 0.16 + 0.84 * Math.Pow(Math.Max(0, factor), 0.72);
+                var pen = new Pen(brush, Math.Max(0.8, Thickness * factor))
+                {
+                    StartLineCap = PenLineCap.Round,
+                    EndLineCap = PenLineCap.Round
+                };
+                pen.Freeze();
+                dc.DrawLine(pen, contour[i], contour[i + 1]);
+            }
+        }
+
+        private List<Point> BuildFallbackPoints()
+        {
+            var result = new List<Point>();
+            if (Math.Abs(SweepAngle) < 0.01) return result;
+            var center = new Point(Bounds.X + Bounds.Width / 2, Bounds.Y + Bounds.Height / 2);
+            double rx = Bounds.Width / 2;
+            double ry = Bounds.Height / 2;
+            int segments = Math.Max(24, (int)(Math.Abs(SweepAngle) / (Math.PI * 2) * 96));
+            for (int i = 0; i <= segments; i++)
+            {
+                double angle = StartAngle + SweepAngle * i / segments;
+                result.Add(new Point(center.X + Math.Cos(angle) * rx, center.Y + Math.Sin(angle) * ry));
+            }
+            return result;
+        }
+
+        public override void Move(Vector delta)
+        {
+            Bounds = new Rect(Bounds.TopLeft + delta, Bounds.Size);
+            for (int i = 0; i < Points.Count; i++) Points[i] += delta;
+        }
+
+        public override Annotation Clone()
+        {
+            var clone = new OpenEllipseAnnotation
+            {
+                Bounds = Bounds,
+                StartAngle = StartAngle,
+                SweepAngle = SweepAngle,
+                StrokeColor = StrokeColor,
+                Thickness = Thickness
+            };
+            clone.Points.AddRange(Points);
+            return clone;
+        }
     }
 
     public class ArrowAnnotation : Annotation

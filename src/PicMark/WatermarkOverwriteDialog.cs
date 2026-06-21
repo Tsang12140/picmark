@@ -79,7 +79,7 @@ namespace PicMark
 
             layout.Children.Add(new TextBlock
             {
-                Text = "当前图片已添加满屏水印。覆盖保存会把水印永久写入原图，被遮挡的内容无法通过 PicMark 还原。\n\n建议另存为新图片，保留一份无水印原图。",
+                Text = "当前图片已添加水印。覆盖保存会把水印永久写入原图，被遮挡的内容无法通过 PicMark 还原。\n\n建议另存为新图片，保留一份无水印原图。",
                 Foreground = new SolidColorBrush(Color.FromRgb(238, 239, 242)),
                 FontSize = 14,
                 LineHeight = 23,

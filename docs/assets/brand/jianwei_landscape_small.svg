@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="见微 图标 小尺寸">
+  <defs><clipPath id="frs"><rect x="16" y="18" width="32" height="28" rx="6"/></clipPath></defs>
+  <rect x="5" y="5" width="54" height="54" rx="15" fill="#F3EFE6"/>
+  <g clip-path="url(#frs)"><path d="M14 46 L27 31 L34 39 L44 27 L50 46 Z" fill="#1F1F1E"/></g>
+  <rect x="16" y="18" width="32" height="28" rx="6" fill="none" stroke="#1F1F1E" stroke-width="4.5"/>
+  <circle cx="44" cy="27" r="5.5" fill="#1E9E86" stroke="#F3EFE6" stroke-width="2"/>
+</svg>

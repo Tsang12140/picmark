@@ -42,7 +42,10 @@
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="System.Xaml">
       <RequiredTargetFramework>4.0</RequiredTargetFramework>
     </Reference>
@@ -81,6 +84,10 @@
     <Compile Include="AppDialog.cs" />
     <Compile Include="Win7Helper.cs" />
     <Compile Include="WatermarkOverwriteDialog.cs" />
+    <Compile Include="ImageConversionService.cs" />
+    <Compile Include="FormatConvertWindow.cs" />
+    <Compile Include="WatermarkAssetManager.cs" />
+    <Compile Include="ProjectStore.cs" />
     <Compile Include="WatermarkSettings.cs" />
     <Page Include="MainWindow.xaml">
       <Generator>MSBuild:Compile</Generator>
@@ -106,6 +113,23 @@
       <DependentUpon>SaveOptionsDialog.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Page Include="BatchCropWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="BatchCropWindow.xaml.cs">
+      <DependentUpon>BatchCropWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Page Include="BatchCropPresetNameDialog.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="BatchCropPresetNameDialog.xaml.cs">
+      <DependentUpon>BatchCropPresetNameDialog.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+    <Compile Include="BatchCropPreset.cs" />
     <Compile Include="AnnotationCanvas.cs" />
     <Compile Include="Annotations.cs" />
     <Compile Include="UndoManager.cs" />

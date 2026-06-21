@@ -8,6 +8,7 @@ namespace PicMark
         Arrow,
         Freehand,
         Mosaic,
-        Text
+        Text,
+        Crop
     }
 }

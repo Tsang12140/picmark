@@ -163,7 +163,7 @@ namespace PicMark
                 Height = 32,
                 Margin = new Thickness(8, 0, 0, 0),
                 Padding = new Thickness(14, 0, 14, 0),
-                FontWeight = FontWeights.Bold,
+                FontWeight = primary ? FontWeights.Bold : FontWeights.Normal,
                 Cursor = Cursors.Hand,
                 Background = new SolidColorBrush(primary ? Color.FromRgb(82, 101, 255) : Color.FromRgb(70, 70, 70)),
                 BorderBrush = new SolidColorBrush(primary ? Color.FromRgb(82, 101, 255) : Color.FromRgb(86, 86, 86)),

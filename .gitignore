@@ -29,3 +29,12 @@ installer/redist/*.msi
 *.cache
 *.pdb
 
+# Local automation/workspace artifacts
+.codex-temp/
+.workbuddy/
+.vscode/
+dist/
+test-materials/
+tools/
+*.draft
+
