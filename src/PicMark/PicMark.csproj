@@ -85,6 +85,7 @@
     <Compile Include="Win7Helper.cs" />
     <Compile Include="WatermarkOverwriteDialog.cs" />
     <Compile Include="ImageConversionService.cs" />
+    <Compile Include="OnlineServices.cs" />
     <Compile Include="FormatConvertWindow.cs" />
     <Compile Include="WatermarkAssetManager.cs" />
     <Compile Include="ProjectStore.cs" />

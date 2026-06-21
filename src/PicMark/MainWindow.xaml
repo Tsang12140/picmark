@@ -839,6 +839,12 @@
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuHistoryCache_Click">
                                     <TextBlock Text="历史缓存"/>
                                 </Button>
+                                <Button x:Name="OptCheckUpdate" Style="{StaticResource SaveMenuButton}" Click="MenuCheckUpdate_Click">
+                                    <TextBlock x:Name="OptCheckUpdateText" Text="检查更新"/>
+                                </Button>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuUpdatePrivacy_Click">
+                                    <TextBlock Text="更新与隐私"/>
+                                </Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuShortcutsHelp_Click">
                                     <TextBlock Text="快捷键"/>
                                 </Button>

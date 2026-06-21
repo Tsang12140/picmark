@@ -68,6 +68,8 @@ namespace PicMark
         private bool _viewerBottomHot;
         private bool _viewerLeftHot;
         private bool _viewerRightHot;
+        private UpdateCheckResult _lastUpdateCheck;
+        private string _telemetryUrl;
 
         public MainWindow()
         {
@@ -119,6 +121,7 @@ namespace PicMark
             SetImageWorkspaceVisible(false);
             UpdateRecentContextActionUi();
             UpdateZoomControls();
+            StartOnlineServicesTimer();
         }
 
         private void MainWindow_StateChanged(object sender, EventArgs e)
@@ -3241,10 +3244,287 @@ namespace PicMark
             ShowHistoryCacheDialog();
         }
 
+        private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            OptionsPopup.IsOpen = false;
+            OptCheckUpdateText.Text = "正在检查...";
+            UpdateCheckResult result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion());
+            HandleUpdateCheckResult(result, true);
+        }
+
+        private void MenuUpdatePrivacy_Click(object sender, RoutedEventArgs e)
+        {
+            OptionsPopup.IsOpen = false;
+            ShowUpdatePrivacyDialog();
+        }
+
         private void MenuAbout_Click(object sender, RoutedEventArgs e)
         {
             OptionsPopup.IsOpen = false;
             ShowAboutDialog();
+        }
+
+        private void StartOnlineServicesTimer()
+        {
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+            timer.Tick += async (s, e) =>
+            {
+                timer.Stop();
+                _telemetryUrl = _settings.LastTelemetryUrl;
+
+                if (string.Equals(_settings.TelemetryConsent, "Ask", StringComparison.OrdinalIgnoreCase))
+                    ShowTelemetryConsentPrompt();
+
+                UpdateCheckResult result = null;
+                bool needsManifest = OnlineServices.ShouldCheckUpdate(_settings)
+                    || (string.Equals(_settings.TelemetryConsent, "Allowed", StringComparison.OrdinalIgnoreCase)
+                        && string.IsNullOrWhiteSpace(_telemetryUrl));
+                if (needsManifest)
+                {
+                    result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion());
+                    HandleUpdateCheckResult(result, false);
+                    if (_settings.AutoCheckUpdates)
+                        OnlineServices.MarkUpdateChecked(_settings);
+                }
+
+                _telemetryUrl = result?.TelemetryUrl ?? _telemetryUrl;
+                await OnlineServices.SendDailyTelemetryAsync(_settings, GetDisplayVersion(), _telemetryUrl);
+            };
+            timer.Start();
+        }
+
+        private void HandleUpdateCheckResult(UpdateCheckResult result, bool showDialog)
+        {
+            _lastUpdateCheck = result;
+            if (result != null && !string.IsNullOrWhiteSpace(result.TelemetryUrl))
+            {
+                _telemetryUrl = result.TelemetryUrl;
+                _settings.LastTelemetryUrl = result.TelemetryUrl;
+                _settings.Save();
+            }
+
+            if (result == null || !result.Success)
+            {
+                OptCheckUpdateText.Text = "检查更新";
+                if (showDialog)
+                    AppDialog.Show(this, "暂时无法检查更新。请稍后再试，或直接到 GitHub Releases 查看。", "检查更新");
+                return;
+            }
+
+            if (!result.HasUpdate)
+            {
+                OptCheckUpdateText.Text = "检查更新";
+                if (showDialog)
+                    AppDialog.Show(this, $"当前已是最新版本：{GetDisplayVersion()}", "检查更新");
+                return;
+            }
+
+            bool ignored = string.Equals(_settings.IgnoredUpdateVersion, result.LatestVersion, StringComparison.OrdinalIgnoreCase);
+            OptCheckUpdateText.Text = ignored ? "检查更新" : "检查更新 · 有新版";
+
+            if (showDialog)
+                ShowUpdateAvailableDialog(result);
+        }
+
+        private void ShowUpdateAvailableDialog(UpdateCheckResult result)
+        {
+            var dialog = CreateSimpleDialog("发现新版本", 520, 380);
+            var root = new StackPanel { Margin = new Thickness(18) };
+            root.Children.Add(MakeDialogTitle($"发现新版本 {result.LatestVersion}"));
+            root.Children.Add(new TextBlock
+            {
+                Text = "更新不会自动安装。你可以打开下载页自行选择安装版或免安装版。",
+                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 22,
+                Margin = new Thickness(0, 0, 0, 12)
+            });
+
+            if (result.Notes != null && result.Notes.Count > 0)
+            {
+                foreach (string note in result.Notes.Take(5))
+                    root.Children.Add(MakeDialogText("• " + note));
+            }
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
+            var ignoreButton = new Button { Content = "不再提醒此版本", Style = (Style)FindResource("ToolButton"), MinWidth = 118, Margin = new Thickness(0, 0, 8, 0) };
+            var laterButton = new Button { Content = "稍后再说", Style = (Style)FindResource("ToolButton"), MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) };
+            var openButton = new Button { Content = "打开下载页", Style = (Style)FindResource("PrimaryButton"), MinWidth = 96 };
+            buttons.Children.Add(ignoreButton);
+            buttons.Children.Add(laterButton);
+            buttons.Children.Add(openButton);
+            root.Children.Add(buttons);
+
+            ignoreButton.Click += (s, e) =>
+            {
+                _settings.IgnoredUpdateVersion = result.LatestVersion ?? string.Empty;
+                _settings.Save();
+                OptCheckUpdateText.Text = "检查更新";
+                dialog.Close();
+            };
+            laterButton.Click += (s, e) => dialog.Close();
+            openButton.Click += (s, e) =>
+            {
+                OpenExternalUrl(result.ReleaseUrl);
+                dialog.Close();
+            };
+
+            dialog.Content = root;
+            dialog.ShowDialog();
+        }
+
+        private void ShowTelemetryConsentPrompt()
+        {
+            var dialog = CreateSimpleDialog("帮助改进见微 PicMark", 520, 330);
+            var root = new StackPanel { Margin = new Thickness(18) };
+            root.Children.Add(MakeDialogTitle("是否允许匿名使用统计？"));
+            root.Children.Add(new TextBlock
+            {
+                Text = "允许后，PicMark 每天最多发送一次匿名启动统计，用来了解版本使用情况、系统兼容性和低分辨率屏幕占比。\n\n不会上传图片、文件名、文件路径、编辑内容、Windows 用户名或电脑名。你可以随时在“更新与隐私”里关闭。",
+                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 22,
+                Margin = new Thickness(0, 0, 0, 18)
+            });
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            var denyButton = new Button { Content = "不允许", Style = (Style)FindResource("ToolButton"), MinWidth = 78, Margin = new Thickness(0, 0, 8, 0) };
+            var allowButton = new Button { Content = "允许匿名统计", Style = (Style)FindResource("PrimaryButton"), MinWidth = 112 };
+            buttons.Children.Add(denyButton);
+            buttons.Children.Add(allowButton);
+            root.Children.Add(buttons);
+
+            denyButton.Click += (s, e) =>
+            {
+                _settings.TelemetryConsent = "Denied";
+                _settings.Save();
+                dialog.Close();
+            };
+            allowButton.Click += async (s, e) =>
+            {
+                _settings.TelemetryConsent = "Allowed";
+                _settings.Save();
+                await OnlineServices.SendDailyTelemetryAsync(_settings, GetDisplayVersion(), _telemetryUrl);
+                dialog.Close();
+            };
+
+            dialog.Content = root;
+            dialog.ShowDialog();
+        }
+
+        private void ShowUpdatePrivacyDialog()
+        {
+            var dialog = CreateSimpleDialog("更新与隐私", 560, 430);
+            var root = new StackPanel { Margin = new Thickness(18) };
+            root.Children.Add(MakeDialogTitle("更新与隐私"));
+
+            var autoUpdate = new CheckBox
+            {
+                Content = "自动检查更新（启动后延迟检查，最多每 3 天一次）",
+                IsChecked = _settings.AutoCheckUpdates,
+                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                Margin = new Thickness(0, 8, 0, 10)
+            };
+            var telemetry = new CheckBox
+            {
+                Content = "发送匿名使用统计（每天最多一次，可随时关闭）",
+                IsChecked = string.Equals(_settings.TelemetryConsent, "Allowed", StringComparison.OrdinalIgnoreCase),
+                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                Margin = new Thickness(0, 0, 0, 12)
+            };
+            root.Children.Add(autoUpdate);
+            root.Children.Add(telemetry);
+            root.Children.Add(new TextBlock
+            {
+                Text = "匿名统计只包含版本号、系统版本、安装版/免安装版、分辨率区间、是否低分辨率屏幕、随机匿名 ID 和日期。\n\n不会上传图片、文件名、文件路径、编辑内容、Windows 用户名或电脑名。没有网络或服务器不可用时会静默失败。",
+                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 22,
+                Margin = new Thickness(0, 0, 0, 18)
+            });
+
+            string current = _lastUpdateCheck != null && _lastUpdateCheck.Success
+                ? (_lastUpdateCheck.HasUpdate ? $"发现新版：{_lastUpdateCheck.LatestVersion}" : "当前已是最新版本")
+                : "尚未手动检查更新";
+            root.Children.Add(MakeDialogText("更新状态：" + current));
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
+            var checkButton = new Button { Content = "立即检查", Style = (Style)FindResource("ToolButton"), MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) };
+            var privacyButton = new Button { Content = "隐私说明", Style = (Style)FindResource("ToolButton"), MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) };
+            var saveButton = new Button { Content = "保存", Style = (Style)FindResource("PrimaryButton"), MinWidth = 72 };
+            buttons.Children.Add(checkButton);
+            buttons.Children.Add(privacyButton);
+            buttons.Children.Add(saveButton);
+            root.Children.Add(buttons);
+
+            checkButton.Click += async (s, e) =>
+            {
+                UpdateCheckResult result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion());
+                HandleUpdateCheckResult(result, true);
+            };
+            privacyButton.Click += (s, e) => OpenExternalUrl("https://github.com/Tsang12140/picmark/blob/main/docs/PRIVACY.md");
+            saveButton.Click += (s, e) =>
+            {
+                _settings.AutoCheckUpdates = autoUpdate.IsChecked == true;
+                _settings.TelemetryConsent = telemetry.IsChecked == true ? "Allowed" : "Denied";
+                _settings.Save();
+                dialog.Close();
+            };
+
+            dialog.Content = root;
+            dialog.ShowDialog();
+        }
+
+        private Window CreateSimpleDialog(string title, double width, double height)
+        {
+            return new Window
+            {
+                Owner = this,
+                Title = title,
+                Width = width,
+                Height = height,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Background = (Brush)FindResource("PanelBrush"),
+                FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI")
+            };
+        }
+
+        private TextBlock MakeDialogTitle(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                FontSize = 18,
+                FontWeight = FontWeights.Bold,
+                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                Margin = new Thickness(0, 0, 0, 14)
+            };
+        }
+
+        private TextBlock MakeDialogText(string text)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                TextWrapping = TextWrapping.Wrap,
+                LineHeight = 22,
+                Margin = new Thickness(0, 2, 0, 4)
+            };
+        }
+
+        private void OpenExternalUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return;
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch
+            {
+                AppDialog.Show(this, url, "请在浏览器中打开");
+            }
         }
 
         private void ShowAboutDialog()
@@ -3357,7 +3637,7 @@ namespace PicMark
             content.Children.Add(MakeAboutText($"版本：{version}"));
             content.Children.Add(new TextBlock
             {
-                Text = "PicMark 离线运行，不上传图片；默认保留原图，导出时才写入成品文件。\nCopyright © 2026 Tsang12140",
+                Text = "PicMark 离线运行，不上传图片、文件名、文件路径或编辑内容；匿名统计需用户允许，且可在“更新与隐私”中关闭。\n默认保留原图，导出时才写入成品文件。\nCopyright © 2026 Tsang12140",
                 Foreground = new SolidColorBrush(Color.FromRgb(218, 222, 230)),
                 FontSize = 14,
                 LineHeight = 22,

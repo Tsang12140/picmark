@@ -27,6 +27,13 @@ namespace PicMark
         public int WatermarkAssetLimit { get; set; } = 12;
         public string WatermarkTemplate { get; set; } = "CertificateGrid";
         public string RecentContextAction { get; set; } = string.Empty;
+        public bool AutoCheckUpdates { get; set; } = true;
+        public string TelemetryConsent { get; set; } = "Ask";
+        public string InstallId { get; set; } = Guid.NewGuid().ToString("N");
+        public string LastUpdateCheckUtc { get; set; } = string.Empty;
+        public string IgnoredUpdateVersion { get; set; } = string.Empty;
+        public string LastTelemetryDateUtc { get; set; } = string.Empty;
+        public string LastTelemetryUrl { get; set; } = string.Empty;
         public List<string> RecentFiles { get; } = new List<string>();
         public List<string> WatermarkLogoAssets { get; } = new List<string>();
 
@@ -75,6 +82,13 @@ namespace PicMark
                 "WatermarkAssetLimit=" + WatermarkAssetLimit,
                 "WatermarkTemplate=" + WatermarkTemplate,
                 "RecentContextAction=" + RecentContextAction,
+                "AutoCheckUpdates=" + AutoCheckUpdates,
+                "TelemetryConsent=" + TelemetryConsent,
+                "InstallId=" + InstallId,
+                "LastUpdateCheckUtc=" + LastUpdateCheckUtc,
+                "IgnoredUpdateVersion=" + IgnoredUpdateVersion,
+                "LastTelemetryDateUtc=" + LastTelemetryDateUtc,
+                "LastTelemetryUrl=" + LastTelemetryUrl,
                 "RecentFiles=" + string.Join("|", RecentFiles.Select(Uri.EscapeDataString)),
                 "WatermarkLogoAssets=" + string.Join("|", WatermarkLogoAssets.Select(Uri.EscapeDataString))
             };
@@ -105,6 +119,13 @@ namespace PicMark
                 case "WatermarkAssetLimit": WatermarkAssetLimit = Math.Max(1, ParseInt(value, WatermarkAssetLimit)); break;
                 case "WatermarkTemplate": WatermarkTemplate = value; break;
                 case "RecentContextAction": RecentContextAction = value ?? string.Empty; break;
+                case "AutoCheckUpdates": AutoCheckUpdates = ParseBool(value, AutoCheckUpdates); break;
+                case "TelemetryConsent": TelemetryConsent = NormalizeTelemetryConsent(value); break;
+                case "InstallId": InstallId = string.IsNullOrWhiteSpace(value) ? InstallId : value; break;
+                case "LastUpdateCheckUtc": LastUpdateCheckUtc = value ?? string.Empty; break;
+                case "IgnoredUpdateVersion": IgnoredUpdateVersion = value ?? string.Empty; break;
+                case "LastTelemetryDateUtc": LastTelemetryDateUtc = value ?? string.Empty; break;
+                case "LastTelemetryUrl": LastTelemetryUrl = value ?? string.Empty; break;
                 case "RecentFiles":
                     RecentFiles.Clear();
                     foreach (string item in value.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries))
@@ -139,6 +160,18 @@ namespace PicMark
             return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
                 ? parsed
                 : fallback;
+        }
+
+        private static bool ParseBool(string value, bool fallback)
+        {
+            return bool.TryParse(value, out bool parsed) ? parsed : fallback;
+        }
+
+        private static string NormalizeTelemetryConsent(string value)
+        {
+            if (string.Equals(value, "Allowed", StringComparison.OrdinalIgnoreCase)) return "Allowed";
+            if (string.Equals(value, "Denied", StringComparison.OrdinalIgnoreCase)) return "Denied";
+            return "Ask";
         }
     }
 }
