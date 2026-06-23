@@ -62,7 +62,7 @@ namespace PicMark
             AllowsTransparency = true;
             ResizeMode = ResizeMode.NoResize;
             Background = Brushes.Transparent;
-            FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI");
+            FontFamily = UiFonts.Family;
             AllowDrop = true;
             DragOver += Window_DragOver;
             Drop += Window_Drop;

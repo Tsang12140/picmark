@@ -5,7 +5,7 @@
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         ShowInTaskbar="False"
         Background="#FFF6F7FB"
-        FontFamily="Segoe UI, Microsoft YaHei UI, Microsoft YaHei">
+        FontFamily="{StaticResource AppUiFontFamily}">
     <Window.Resources>
         <Style TargetType="Button">
             <Setter Property="Height" Value="38"/>

@@ -12,6 +12,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <Deterministic>true</Deterministic>
     <ApplicationIcon>App.ico</ApplicationIcon>
+    <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -70,6 +71,10 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
+    <None Include="Properties\app.manifest" />
+    <Resource Include="Assets\Fonts\PicMarkPuHuiUI-Regular.ttf" />
+    <Resource Include="Assets\Fonts\PicMarkPuHuiUI-SemiBold.ttf" />
+    <Resource Include="Assets\Fonts\PicMarkPuHuiUI-Bold.ttf" />
     <Resource Include="App.ico" />
   </ItemGroup>
   <ItemGroup>
@@ -82,6 +87,7 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="AppDialog.cs" />
+    <Compile Include="UiFonts.cs" />
     <Compile Include="Win7Helper.cs" />
     <Compile Include="WatermarkOverwriteDialog.cs" />
     <Compile Include="ImageConversionService.cs" />

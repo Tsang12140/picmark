@@ -2030,7 +2030,7 @@ namespace PicMark
                 Background = Brushes.Transparent,
                 ResizeMode = ResizeMode.NoResize,
                 ShowInTaskbar = false,
-                FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI")
+                FontFamily = UiFonts.Family
             };
 
             var root = new Grid { Margin = new Thickness(24) };
@@ -3486,7 +3486,7 @@ namespace PicMark
                 ResizeMode = ResizeMode.NoResize,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Background = (Brush)FindResource("PanelBrush"),
-                FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI")
+                FontFamily = UiFonts.Family
             };
         }
 
@@ -3543,7 +3543,7 @@ namespace PicMark
                 Background = Brushes.Transparent,
                 ResizeMode = ResizeMode.NoResize,
                 ShowInTaskbar = false,
-                FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI")
+                FontFamily = UiFonts.Family
             };
 
             var root = new Grid { Margin = new Thickness(24) };

@@ -4,7 +4,7 @@
         Title="水印批量裁切" Width="720" Height="880"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        FontFamily="Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI">
+        FontFamily="{StaticResource AppUiFontFamily}">
     <Window.Resources>
         <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFF6F7FB"/>
         <SolidColorBrush x:Key="TextSecondaryBrush" Color="#FFB8BDC7"/>

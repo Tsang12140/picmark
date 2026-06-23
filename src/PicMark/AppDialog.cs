@@ -39,7 +39,7 @@ namespace PicMark
             Background = Brushes.Transparent;
             ResizeMode = ResizeMode.NoResize;
             ShowInTaskbar = false;
-            FontFamily = new FontFamily("Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI");
+            FontFamily = UiFonts.Family;
 
             Content = BuildContent(title, message);
         }

@@ -10,7 +10,7 @@
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         AllowDrop="True" Drop="Window_Drop"
-        FontFamily="Alibaba PuHuiTi 3.0, Alibaba PuHuiTi, Microsoft YaHei UI, Microsoft YaHei, SimHei, Segoe UI"
+        FontFamily="{StaticResource AppUiFontFamily}"
         Background="#FF242424">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome
