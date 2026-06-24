@@ -266,7 +266,8 @@
   /* ---------- download ---------- */
   .download-band{text-align:center;padding:40px 0 140px;}
   .version-tag{display:inline-block;font-size:12.5px;font-weight:700;color:var(--ink);background:var(--surface);border:1px solid rgba(31,31,30,.1);padding:5px 12px;border-radius:999px;margin-bottom:20px;}
-  .download-band h2{font-size:clamp(32px,4.6vw,54px);text-wrap:balance;line-height:1.08;margin:0 auto 30px;font-weight:800;letter-spacing:-1.2px;max-width:520px;}
+  .download-band h2{font-size:clamp(32px,4.6vw,54px);text-wrap:balance;line-height:1.08;margin:0 auto 30px;font-weight:800;letter-spacing:-1.2px;max-width:520px;text-align:center;}
+  .download-title-text{display:inline-block;transform:translateX(.16em);}
   .download-buttons{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;}
   .build-note{font-size:13px;color:var(--muted);}
   .build-note code{background:var(--bg-soft);padding:2px 7px;border-radius:6px;font-size:12.5px;}
@@ -487,7 +488,7 @@
   <section id="download" class="download-band">
     <div class="container">
       <span class="version-tag reveal">最新版本 0.2.2</span>
-      <h2 class="reveal">现在就<span class="accent-word">试试</span>。</h2>
+      <h2 class="reveal"><span class="download-title-text">现在就<span class="accent-word">试试</span>。</span></h2>
       <div class="download-buttons reveal">
         <a class="btn btn-primary" href="https://github.com/Tsang12140/picmark/releases/download/v0.2.2/PicMark-Setup-0.2.2.exe">下载安装包</a>
         <a class="btn btn-ghost" href="https://github.com/Tsang12140/picmark/releases/download/v0.2.2/PicMark-portable-0.2.2.zip">免安装便携版</a>
