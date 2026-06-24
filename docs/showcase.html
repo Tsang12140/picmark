@@ -256,6 +256,7 @@
   .dark-band .kicker{color:#7FD9C4;background:rgba(255,255,255,.08);margin-left:0;}
   .dark-band .kicker::before{background:#7FD9C4;}
   .dark-band h2{font-size:clamp(28px,3.8vw,42px);text-wrap:balance;line-height:1.15;margin:0 0 10px;font-weight:800;letter-spacing:-.7px;max-width:520px;}
+  .mobile-break{display:none;}
   .dark-band .sub{color:var(--dark-muted);font-size:13.5px;line-height:1.6;text-wrap:balance;max-width:440px;margin:0 0 56px;opacity:.85;}
   .detail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:rgba(255,255,255,.08);border-radius:14px;overflow:hidden;}
   .detail-item{background:var(--dark);padding:30px 22px;text-align:left;}
@@ -310,6 +311,7 @@
     .details{padding:48px 0 88px;}
     .dark-band{padding:56px 28px;border-radius:14px;}
     .dark-band h2{font-size:clamp(36px,10vw,48px);line-height:1.05;letter-spacing:-1.1px;}
+    .mobile-break{display:block;}
     .dark-band .sub{font-size:15.5px;}
     .detail-grid{grid-template-columns:repeat(2,1fr);}
     .download-band{padding:24px 0 96px;}
@@ -446,7 +448,7 @@
     <div class="container">
       <div class="dark-band reveal">
         <div class="kicker">适配</div>
-        <h2>为普通电脑准备的。</h2>
+        <h2>为普通电脑<span class="mobile-break"></span>准备的。</h2>
         <p class="sub">不追求堆参数，重点照顾低配置设备和老系统。</p>
         <div class="detail-grid">
           <div class="detail-item">
