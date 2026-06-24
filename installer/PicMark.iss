@@ -7,7 +7,7 @@
 ;  以上均需要安装时联网（与绝大多数 Windows 应用安装器的前提一致）；若用户机器已满足条件，则不会触发任何下载。
 
 #define MyAppName "见微 PicMark"
-#define MyAppVersion "0.2.1"
+#define MyAppVersion "0.2.2"
 #define MyAppPublisher "PicMark"
 #define MyAppExeName "PicMark.exe"
 #define MyBuildOutput "..\src\PicMark\bin\Release"

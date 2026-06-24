@@ -7,8 +7,8 @@ using System.Windows;
 [assembly: AssemblyProduct("PicMark")]
 [assembly: AssemblyCompany("Tsang12140")]
 [assembly: AssemblyCopyright("Copyright © 2026 Tsang12140")]
-[assembly: AssemblyVersion("0.2.1.0")]
-[assembly: AssemblyFileVersion("0.2.1.0")]
+[assembly: AssemblyVersion("0.2.2.0")]
+[assembly: AssemblyFileVersion("0.2.2.0")]
 [assembly: NeutralResourcesLanguage("zh-CN")]
 
 [assembly: ThemeInfo(

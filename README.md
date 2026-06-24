@@ -68,8 +68,8 @@ PicMark 默认在本地处理图片，不上传图片、文件名、文件路径
 
 从 [Releases](https://github.com/Tsang12140/picmark/releases) 下载：
 
-- `PicMark-Setup-0.2.1.exe`：推荐普通用户使用，安装后可注册右键菜单、打开方式和 `.picmark` 工程文件。
-- `PicMark-portable-0.2.1.zip`：免安装版本，解压后直接运行 `PicMark.exe`。
+- `PicMark-Setup-0.2.2.exe`：推荐普通用户使用，安装后可注册右键菜单、打开方式和 `.picmark` 工程文件。
+- `PicMark-portable-0.2.2.zip`：免安装版本，解压后直接运行 `PicMark.exe`。
 
 ## 从源码构建
 
