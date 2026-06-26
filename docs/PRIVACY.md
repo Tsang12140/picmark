@@ -37,7 +37,7 @@ https://raw.githubusercontent.com/Tsang12140/picmark/main/docs/update.json
 ```json
 {
   "event": "app_start",
-  "appVersion": "0.2.2",
+  "appVersion": "0.2.3",
   "channel": "setup",
   "os": "Windows 10+",
   "screenBucket": "1400x800",

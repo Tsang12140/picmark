@@ -1,12 +1,12 @@
 {
-  "latestVersion": "0.2.2",
-  "releaseUrl": "https://github.com/Tsang12140/picmark/releases/tag/v0.2.2",
-  "setupUrl": "https://github.com/Tsang12140/picmark/releases/download/v0.2.2/PicMark-Setup-0.2.2.exe",
-  "portableUrl": "https://github.com/Tsang12140/picmark/releases/download/v0.2.2/PicMark-portable-0.2.2.zip",
+  "latestVersion": "0.2.3",
+  "releaseUrl": "https://github.com/Tsang12140/picmark/releases/tag/v0.2.3",
+  "setupUrl": "https://github.com/Tsang12140/picmark/releases/download/v0.2.3/PicMark-Setup-0.2.3.exe",
+  "portableUrl": "https://github.com/Tsang12140/picmark/releases/download/v0.2.3/PicMark-portable-0.2.3.zip",
   "telemetryUrl": "",
   "notes": [
-    "新增轻量查看器与深色编辑器切换体验",
-    "支持水印、批量水印、裁切、旋转、格式转换和项目保存",
-    "面向 Windows 7 SP1、Windows 10 和低分辨率屏幕做轻量化适配"
+    "安装包改为当前用户安装，减少管理员权限和全局注册表写入",
+    "右键菜单和打开方式注册改为可选，默认不主动接管文件关联",
+    "便携版移除调试文件和注册脚本，降低安全软件误报概率"
   ]
 }
