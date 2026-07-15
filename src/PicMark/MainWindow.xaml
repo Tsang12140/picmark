@@ -756,16 +756,16 @@
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="BtnOpen" Style="{StaticResource PrimaryButton}" Height="30" Click="BtnOpen_Click" ToolTip="打开图片 (Ctrl+O)">
-                        <TextBlock Text="打开"/>
+                        <TextBlock Text="打开" FontWeight="Bold"/>
                     </Button>
                     <Button x:Name="BtnPrintTop" Style="{StaticResource ToolButton}" Height="30" Click="BtnPrint_Click" ToolTip="打印当前图片 (Ctrl+P)">
-                        <TextBlock Text="打印"/>
+                        <TextBlock Text="打印" FontWeight="Bold"/>
                     </Button>
-                    <Button x:Name="BtnCompressTop" Style="{StaticResource ToolButton}" Height="30" Click="MenuSaveAs_Click" ToolTip="压缩/另存为 (Ctrl+Shift+S)">
-                        <TextBlock Text="压缩"/>
+                    <Button x:Name="BtnCompressTop" Style="{StaticResource ToolButton}" Height="30" Visibility="Collapsed" Click="MenuSaveAs_Click" ToolTip="另存为 (Ctrl+Shift+S)">
+                        <TextBlock Text="另存" FontWeight="Bold"/>
                     </Button>
                     <Button x:Name="BtnRotateTop" Style="{StaticResource ToolButton}" Height="30" Click="BtnRotateMenu_Click" ToolTip="旋转 / 翻转">
-                        <TextBlock Text="旋转"/>
+                        <TextBlock Text="旋转" FontWeight="Bold"/>
                     </Button>
                     <Popup x:Name="RotatePopup" PlacementTarget="{Binding ElementName=BtnRotateTop}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
                         <Border x:Name="RotatePopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="6" Width="158">
@@ -780,22 +780,22 @@
                         </Border>
                     </Popup>
                     <Button x:Name="BtnUndoTop" Style="{StaticResource ToolButton}" Height="30" Click="BtnUndo_Click" ToolTip="撤销 (Ctrl+Z)">
-                        <TextBlock Text="撤销"/>
+                        <TextBlock Text="撤销" FontWeight="Bold"/>
                     </Button>
                     <Button x:Name="BtnRedoTop" Style="{StaticResource ToolButton}" Height="30" Click="BtnRedo_Click" ToolTip="重做 (Ctrl+Shift+Z)">
-                        <TextBlock Text="重做"/>
+                        <TextBlock Text="重做" FontWeight="Bold"/>
                     </Button>
                     <Button x:Name="BtnSave" Style="{StaticResource PrimaryButton}" Height="30" MinWidth="78" Click="BtnSaveMenu_Click" ToolTip="保存 (Ctrl+S)">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="保存"/>
+                            <TextBlock Text="保存" FontWeight="Bold"/>
                             <Path Width="9" Height="6" Margin="8,2,0,0" Stretch="Uniform" Fill="White" Data="M 0 0 L 5 5 L 10 0 Z"/>
                         </StackPanel>
                     </Button>
                     <Popup x:Name="SavePopup" PlacementTarget="{Binding ElementName=BtnSave}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
                         <Border x:Name="SavePopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="6" Width="184">
                             <StackPanel>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuSaveAs_Click"><TextBlock Text="另存为"/></Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuSaveProject_Click"><TextBlock Text="保存项目（可继续编辑）"/></Button>
-                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuSaveAs_Click"><TextBlock Text="另存为 / 压缩"/></Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuOverwrite_Click"><TextBlock Text="覆盖原图"/></Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuCopy_Click"><TextBlock Text="复制到剪贴板"/></Button>
                             </StackPanel>
@@ -834,7 +834,7 @@
                                 </Button>
                                 <Border Height="1" Background="#334A4A4A" Margin="8,5"/>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuFormatConvert_Click">
-                                    <TextBlock Text="格式转换..."/>
+                                    <TextBlock Text="另存为其他格式..."/>
                                 </Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuHistoryCache_Click">
                                     <TextBlock Text="历史缓存"/>
@@ -847,6 +847,12 @@
                                 </Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuShortcutsHelp_Click">
                                     <TextBlock Text="快捷键"/>
+                                </Button>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuDefaultAppsHelp_Click">
+                                    <TextBlock Text="设为默认打开方式"/>
+                                </Button>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuReportIssue_Click">
+                                    <TextBlock Text="汇报错误"/>
                                 </Button>
                                 <Border Height="1" Background="#334A4A4A" Margin="8,5"/>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuAbout_Click">
@@ -1072,7 +1078,7 @@
                             </Style>
                         </ContextMenu.Resources>
                         <MenuItem x:Name="CtxCopyImage" Header="复制图片" InputGestureText="Ctrl+C" Click="MenuCopy_Click"/>
-                        <MenuItem x:Name="CtxSaveAs" Header="另存为 / 压缩" InputGestureText="Ctrl+Shift+S" Click="MenuSaveAs_Click"/>
+                        <MenuItem x:Name="CtxSaveAs" Header="另存为" InputGestureText="Ctrl+Shift+S" Click="MenuSaveAs_Click"/>
                         <MenuItem x:Name="CtxPrint" Header="打印" InputGestureText="Ctrl+P" Click="BtnPrint_Click"/>
                         <Separator/>
                         <MenuItem x:Name="CtxRotate" Header="旋转">
@@ -1085,7 +1091,7 @@
                             <MenuItem Header="垂直翻转" Tag="FlipVertical" Click="ImageTransform_Click"/>
                         </MenuItem>
                         <MenuItem x:Name="CtxCrop" Header="裁剪图片..." Click="ContextCrop_Click"/>
-                        <MenuItem x:Name="CtxFormatConvert" Header="格式转换..." Click="MenuFormatConvert_Click"/>
+                        <MenuItem x:Name="CtxFormatConvert" Header="另存为其他格式..." Click="MenuFormatConvert_Click"/>
                         <Separator/>
                         <MenuItem Header="打开新图片..." InputGestureText="Ctrl+O" Click="BtnOpen_Click"/>
                         <MenuItem x:Name="CtxOpenLocation" Header="打开所在位置" Click="MenuOpenContainingFolder_Click"/>
@@ -1195,7 +1201,7 @@
                                    ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
                     </Border>
 
-                    <Border x:Name="BottomZoomBar" Grid.Column="1" Padding="6,5"
+                    <Border x:Name="BottomZoomBar" Grid.Column="1" Padding="6,5" Margin="12,0"
                             Background="#F6F7FAFB" BorderBrush="#FFB9CBD8" BorderThickness="1" CornerRadius="10">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Button x:Name="BottomPanBtn" Style="{StaticResource BottomBarButton}" Tag="Pan" Click="BtnPanCanvas_Click" ToolTip="抓手：点亮后按住图片拖动，放大后更明显">
@@ -1214,7 +1220,7 @@
                             <ComboBox x:Name="ZoomCombo" Width="66" Height="28" Margin="3,0" IsEditable="True" IsReadOnly="True"
                                       Style="{StaticResource DarkComboBox}"
                                       SelectionChanged="ZoomCombo_SelectionChanged">
-                                <ComboBoxItem Content="閫傚簲" Tag="Fit"/>
+                                <ComboBoxItem Content="适应" Tag="Fit"/>
                                 <ComboBoxItem Content="50%" Tag="0.5"/>
                                 <ComboBoxItem Content="75%" Tag="0.75"/>
                                 <ComboBoxItem Content="100%" Tag="1"/>
@@ -1228,7 +1234,8 @@
                         </StackPanel>
                     </Border>
 
-                    <StackPanel x:Name="RightBottomBadges" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" ClipToBounds="True">
+                    <StackPanel x:Name="RightBottomBadges" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" ClipToBounds="True"
+                                Margin="12,0,0,0">
                         <Border x:Name="ImageInfoBadge" Visibility="Collapsed" Height="34" Padding="8,0" Margin="0,0,6,0"
                                 Background="#F6F7FAFB" BorderBrush="#FFB9CBD8" BorderThickness="1" CornerRadius="10">
                             <TextBlock x:Name="ImageInfoText"

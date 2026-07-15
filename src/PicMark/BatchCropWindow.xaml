@@ -4,6 +4,7 @@
         Title="水印批量裁切" Width="720" Height="880"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop"
         FontFamily="{StaticResource AppUiFontFamily}">
     <Window.Resources>
         <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFF6F7FB"/>
@@ -277,8 +278,17 @@
                                  Background="#FF2D2D2D" Foreground="{StaticResource AccentBrush}" BorderThickness="0"/>
 
                     <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
                         <TextBlock x:Name="StatusText" Style="{StaticResource HintText}" VerticalAlignment="Center"/>
-                        <Button x:Name="RunButton" Style="{StaticResource PrimaryButton}" MinWidth="140"
+                        <Button x:Name="OpenResultFolderButton" Grid.Column="1" Style="{StaticResource DarkButton}" MinWidth="126"
+                                Margin="0,0,8,0" Visibility="Collapsed" Click="OpenResultFolder_Click">
+                            <TextBlock Text="打开成品文件夹"/>
+                        </Button>
+                        <Button x:Name="RunButton" Grid.Column="2" Style="{StaticResource PrimaryButton}" MinWidth="140"
                                 HorizontalAlignment="Right" Click="Run_Click">
                             <TextBlock Text="开始批量裁切"/>
                         </Button>
