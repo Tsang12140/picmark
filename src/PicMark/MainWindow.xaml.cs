@@ -1908,6 +1908,12 @@ namespace PicMark
             window.ShowDialog();
         }
 
+        private void BtnCollage_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new CollageWindow(GetCurrentDiskPath()) { Owner = this };
+            window.ShowDialog();
+        }
+
         private void BtnBatchWatermark_Click(object sender, RoutedEventArgs e)
         {
             ApplyWatermarkFromControls();

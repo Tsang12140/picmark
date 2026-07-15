@@ -1352,6 +1352,16 @@
                                     <TextBlock Style="{StaticResource PanelToolLabel}" Text="裁剪"/>
                                 </StackPanel>
                             </Button>
+                            <Button x:Name="PanelBtnCollage" Style="{StaticResource PanelToolButton}" Click="BtnCollage_Click" ToolTip="拼图">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 4 4 L 11 4 L 11 11 L 4 11 Z M 13 4 L 20 4 L 20 11 L 13 11 Z M 4 13 L 11 13 L 11 20 L 4 20 Z M 13 13 L 20 13 L 20 20 L 13 20 Z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="拼图"/>
+                                </StackPanel>
+                            </Button>
                         </UniformGrid>
 
                         <Border x:Name="CropPanel" Visibility="Collapsed" Background="#FF323232"
