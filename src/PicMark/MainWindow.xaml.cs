@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -56,6 +57,7 @@ namespace PicMark
         private WatermarkLayout _watermarkLayout = WatermarkLayout.Tiled;
         private bool _watermarkBold;
         private Color _watermarkColor = Colors.Black;
+        private bool _watermarkColorUserSelected;
         private string _watermarkFontFamily = "Microsoft YaHei UI";
         private string _watermarkLogoPath = string.Empty;
         private bool _watermarkLogoFlipHorizontal;
@@ -696,32 +698,54 @@ namespace PicMark
 
         private void PasteFromClipboard()
         {
-            if (!Clipboard.ContainsImage())
+            try
             {
-                UpdateStatus("剪贴板里没有图片");
-                return;
-            }
-            var src = Clipboard.GetImage();
-            if (src == null) return;
-            if (!ConfirmDiscardUnsavedChanges("粘贴新图片")) return;
-            if (src.CanFreeze) src.Freeze();
+                if (!Clipboard.ContainsImage())
+                {
+                    UpdateStatus("剪贴板里没有图片");
+                    return;
+                }
+                var src = Clipboard.GetImage();
+                if (src == null)
+                {
+                    UpdateStatus("剪贴板图片格式暂不支持");
+                    return;
+                }
+                if (!ConfirmDiscardUnsavedChanges("粘贴新图片")) return;
+                if (src.CanFreeze) src.Freeze();
 
-            ClearBatch();
-            Canvas1.Image = src;
-            Canvas1.ClearAll();
-            SetImageWorkspaceVisible(true);
-            _currentFilePath = null;
-            _currentProjectPath = null;
-            _currentExtension = ".png";
-            _hasUnsavedChanges = false;
-            SetCurrentFileName("剪贴板图片.png");
-            UpdateImageInfo(src, null);
-            _viewerFiles.Clear();
-            _viewerIndex = -1;
-            SetEditMode(false, false);
-            FitImageAfterLayout();
-            UpdateStatus("已粘贴剪贴板图片，保存时请选择保存位置");
-            UpdateViewerNavigation();
+                ClearBatch();
+                Canvas1.Image = src;
+                Canvas1.ClearAll();
+                SetImageWorkspaceVisible(true);
+                _currentFilePath = null;
+                _currentProjectPath = null;
+                _currentExtension = ".png";
+                _hasUnsavedChanges = false;
+                SetCurrentFileName("剪贴板图片.png");
+                UpdateImageInfo(src, null);
+                _viewerFiles.Clear();
+                _viewerIndex = -1;
+                SetEditMode(false, false);
+                FitImageAfterLayout();
+                UpdateStatus("已粘贴剪贴板图片，保存时请选择保存位置");
+                UpdateViewerNavigation();
+            }
+            catch (COMException ex)
+            {
+                UpdateStatus("读取剪贴板失败");
+                AppDialog.Show(this, $"读取剪贴板图片失败：{ex.Message}", "粘贴失败");
+            }
+            catch (ExternalException ex)
+            {
+                UpdateStatus("读取剪贴板失败");
+                AppDialog.Show(this, $"读取剪贴板图片失败：{ex.Message}", "粘贴失败");
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("读取剪贴板失败");
+                AppDialog.Show(this, $"读取剪贴板图片失败：{ex.Message}", "粘贴失败");
+            }
         }
 
         private void FitImageAfterLayout()
@@ -865,11 +889,13 @@ namespace PicMark
 
             if (WindowState == WindowState.Maximized)
             {
+                WindowShell.Margin = new Thickness(6);
                 WindowShell.CornerRadius = new CornerRadius(0);
                 WindowShell.BorderThickness = new Thickness(0);
             }
             else
             {
+                WindowShell.Margin = new Thickness(0);
                 WindowShell.CornerRadius = new CornerRadius(8);
                 WindowShell.BorderThickness = new Thickness(1);
             }
@@ -1071,7 +1097,7 @@ namespace PicMark
         {
             Visibility editorVisibility = editMode ? Visibility.Visible : Visibility.Collapsed;
             if (BtnPrintTop != null) BtnPrintTop.Visibility = editorVisibility;
-            if (BtnCompressTop != null) BtnCompressTop.Visibility = editorVisibility;
+            if (BtnCompressTop != null) BtnCompressTop.Visibility = Visibility.Collapsed;
             if (BtnRotateTop != null) BtnRotateTop.Visibility = editorVisibility;
             if (BtnUndoTop != null) BtnUndoTop.Visibility = editorVisibility;
             if (BtnRedoTop != null) BtnRedoTop.Visibility = editorVisibility;
@@ -1085,10 +1111,14 @@ namespace PicMark
             Style bottomStyle = (Style)FindResource(editMode ? "BottomBarButton" : "ViewerBottomBarButton");
             Style navStyle = (Style)FindResource(editMode ? "ToolButton" : "ViewerNavButton");
             Brush normalForeground = editMode ? BrushFromRgb(0xF4, 0xF4, 0xF5) : BrushFromRgb(0x25, 0x31, 0x42);
+            Brush topButtonBackground = editMode ? BrushFromRgb(0x30, 0x30, 0x30) : BrushFromRgb(0xF7, 0xFA, 0xFB);
+            Brush topButtonBorder = editMode ? BrushFromRgb(0x4A, 0x4A, 0x4A) : BrushFromRgb(0xC8, 0xD6, 0xE2);
             Brush transparent = Brushes.Transparent;
 
-            foreach (var button in new[] { BtnOpen, BtnSave, BtnEditMode })
+            foreach (var button in new[] { BtnSave, BtnEditMode })
                 ApplyButtonStyle(button, primaryStyle);
+            bool hasImage = Canvas1.Image != null;
+            ApplyButtonStyle(BtnOpen, hasImage ? toolStyle : primaryStyle);
 
             foreach (var button in new[]
             {
@@ -1096,7 +1126,7 @@ namespace PicMark
             })
             {
                 ApplyButtonStyle(button, toolStyle);
-                ResetNeutralButton(button, normalForeground, transparent, transparent, new Thickness(0));
+                ResetNeutralButton(button, normalForeground, topButtonBackground, topButtonBorder, new Thickness(1));
             }
 
             foreach (var button in new[] { ViewerPrevButton, ViewerNextButton })
@@ -1125,10 +1155,15 @@ namespace PicMark
 
             if (BtnOpen != null)
             {
-                BtnOpen.Background = (Brush)FindResource("AccentBrush");
-                BtnOpen.Foreground = Brushes.White;
-                BtnOpen.BorderBrush = (Brush)FindResource("AccentBrush");
-                BtnOpen.BorderThickness = new Thickness(0);
+                if (hasImage)
+                    ResetNeutralButton(BtnOpen, normalForeground, topButtonBackground, topButtonBorder, new Thickness(1));
+                else
+                {
+                    BtnOpen.Background = (Brush)FindResource("AccentBrush");
+                    BtnOpen.Foreground = Brushes.White;
+                    BtnOpen.BorderBrush = (Brush)FindResource("AccentBrush");
+                    BtnOpen.BorderThickness = new Thickness(0);
+                }
             }
             if (BtnSave != null)
             {
@@ -1398,6 +1433,8 @@ namespace PicMark
                     WatermarkAngleSlider.Value = 0;
                     break;
             }
+            if (_watermarkStyle != WatermarkStyle.ImageLogo)
+                _watermarkColorUserSelected = false;
             _initializingWatermarkUi = false;
             UpdateWatermarkControls();
             ApplyWatermarkFromControls(resetSinglePosition);
@@ -1423,6 +1460,7 @@ namespace PicMark
         private void WatermarkColor_Click(object sender, RoutedEventArgs e)
         {
             if (!(sender is Button button)) return;
+            _watermarkColorUserSelected = true;
             switch (button.Tag as string)
             {
                 case "White": _watermarkColor = Colors.White; break;
@@ -1580,6 +1618,7 @@ namespace PicMark
         {
             if (_initializingWatermarkUi || !_hasSelectedWatermarkTemplate || Canvas1 == null || Canvas1.Image == null) return;
             var current = Canvas1.GetWatermark();
+            ApplyAdaptiveWatermarkColorIfNeeded(Canvas1.Image);
             Canvas1.SetWatermark(new WatermarkSettings
             {
                 Enabled = true,
@@ -1604,6 +1643,54 @@ namespace PicMark
                 _hasUnsavedChanges = true;
         }
 
+        private void ApplyAdaptiveWatermarkColorIfNeeded(BitmapSource image)
+        {
+            if (_watermarkColorUserSelected || _watermarkStyle == WatermarkStyle.ImageLogo || image == null) return;
+            _watermarkColor = EstimateImageLuminance(image) < 0.48 ? Colors.White : Colors.Black;
+        }
+
+        private static double EstimateImageLuminance(BitmapSource source)
+        {
+            try
+            {
+                const int sampleSize = 64;
+                double scale = Math.Min(1.0, sampleSize / Math.Max(1.0, Math.Max(source.PixelWidth, source.PixelHeight)));
+                BitmapSource sampled = scale < 1.0
+                    ? new TransformedBitmap(source, new ScaleTransform(scale, scale))
+                    : source;
+                BitmapSource bitmap = sampled.Format == PixelFormats.Bgra32 || sampled.Format == PixelFormats.Pbgra32
+                    ? sampled
+                    : new FormatConvertedBitmap(sampled, PixelFormats.Bgra32, null, 0);
+
+                int width = Math.Max(1, bitmap.PixelWidth);
+                int height = Math.Max(1, bitmap.PixelHeight);
+                int stride = width * 4;
+                var pixels = new byte[stride * height];
+                bitmap.CopyPixels(pixels, stride, 0);
+
+                double total = 0;
+                double weight = 0;
+                for (int i = 0; i < pixels.Length; i += 4)
+                {
+                    byte b = pixels[i];
+                    byte g = pixels[i + 1];
+                    byte r = pixels[i + 2];
+                    byte a = pixels[i + 3];
+                    if (a < 24) continue;
+
+                    double alpha = a / 255.0;
+                    total += ((0.2126 * r) + (0.7152 * g) + (0.0722 * b)) / 255.0 * alpha;
+                    weight += alpha;
+                }
+
+                return weight <= 0 ? 1.0 : total / weight;
+            }
+            catch
+            {
+                return 1.0;
+            }
+        }
+
         private void Canvas1_WatermarkChanged(object sender, EventArgs e)
         {
             if (_syncingWatermarkFromCanvas) return;
@@ -1616,6 +1703,8 @@ namespace PicMark
             _watermarkLogoPath = watermark.LogoPath ?? string.Empty;
             _watermarkLogoFlipHorizontal = watermark.LogoFlipHorizontal;
             _watermarkLogoFlipVertical = watermark.LogoFlipVertical;
+            _watermarkColor = watermark.Color;
+            _watermarkColorUserSelected = true;
             WatermarkLogoScaleSlider.Value = Math.Max(WatermarkLogoScaleSlider.Minimum,
                 Math.Min(WatermarkLogoScaleSlider.Maximum, watermark.LogoScalePercent <= 0 ? 18 : watermark.LogoScalePercent));
             WatermarkOffsetSlider.Value = Math.Max(WatermarkOffsetSlider.Minimum,
@@ -1815,7 +1904,13 @@ namespace PicMark
 
         private void BtnBatchCrop_Click(object sender, RoutedEventArgs e)
         {
-            var window = new BatchCropWindow { Owner = this };
+            var window = new BatchCropWindow(GetCurrentDiskPath()) { Owner = this };
+            window.ShowDialog();
+        }
+
+        private void BtnCollage_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new CollageWindow(GetCurrentDiskPath()) { Owner = this };
             window.ShowDialog();
         }
 
@@ -2775,7 +2870,8 @@ namespace PicMark
 
         private void MenuFormatConvert_Click(object sender, RoutedEventArgs e)
         {
-            OptionsPopup.IsOpen = false;
+            if (OptionsPopup != null)
+                OptionsPopup.IsOpen = false;
             string currentPath = GetCurrentDiskPath();
             bool hasConvertibleDiskFile = !string.IsNullOrWhiteSpace(currentPath)
                 && File.Exists(currentPath)
@@ -2890,7 +2986,7 @@ namespace PicMark
                 case "CopyImage":
                     return "复制图片";
                 case "SaveAs":
-                    return "另存为 / 压缩";
+                    return "另存为";
                 case "Print":
                     return "打印";
                 case "Crop":
@@ -2900,7 +2996,7 @@ namespace PicMark
                 case "ImageInfo":
                     return "图片信息";
                 case "FormatConvert":
-                    return "格式转换";
+                    return "另存为其他格式";
                 case "RotateLeft90":
                     return "向左旋转 90°";
                 case "RotateRight90":
@@ -3236,6 +3332,79 @@ namespace PicMark
         {
             OptionsPopup.IsOpen = false;
             ShowShortcutsDialog();
+        }
+
+        private void MenuDefaultAppsHelp_Click(object sender, RoutedEventArgs e)
+        {
+            OptionsPopup.IsOpen = false;
+            var result = AppDialog.Show(this,
+                "Windows 10 不允许应用静默修改默认图片打开方式。\n\n我可以帮你打开系统“默认应用”设置：在“照片查看器/按文件类型选择默认应用”里，把 jpg、png、bmp、webp 选择为 PicMark。",
+                "设为默认打开方式",
+                MessageBoxButton.OKCancel);
+            if (result != MessageBoxResult.OK) return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo("ms-settings:defaultapps") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                AppDialog.Show(this, $"无法打开系统默认应用设置：{ex.Message}", "提示");
+            }
+        }
+
+        private void MenuReportIssue_Click(object sender, RoutedEventArgs e)
+        {
+            OptionsPopup.IsOpen = false;
+            string report = BuildIssueReportTemplate();
+            bool copied = TrySetClipboardText(report);
+            AppDialog.Show(this,
+                copied
+                    ? "已把错误汇报模板复制到剪贴板。\n\n你可以直接粘贴给开发者，最好再附上一张截图和触发步骤。"
+                    : "已生成错误汇报模板，但复制到剪贴板失败。\n\n请重试，或手动描述：截图、触发步骤、当前文件名、系统版本。",
+                "汇报错误");
+        }
+
+        private string BuildIssueReportTemplate()
+        {
+            string appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
+            string file = !string.IsNullOrWhiteSpace(_currentFilePath) ? Path.GetFileName(_currentFilePath) : "未打开图片";
+            string image = Canvas1?.Image == null
+                ? "无"
+                : $"{Canvas1.Image.PixelWidth}x{Canvas1.Image.PixelHeight}, 缩放 {Canvas1.Scale:P0}";
+            return
+                "PicMark 错误汇报\n" +
+                $"时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}\n" +
+                $"版本：{appVersion}\n" +
+                $"系统：{Environment.OSVersion.VersionString}\n" +
+                $"当前文件：{file}\n" +
+                $"图片信息：{image}\n\n" +
+                "问题现象：\n" +
+                "- \n\n" +
+                "复现步骤：\n" +
+                "1. \n" +
+                "2. \n" +
+                "3. \n\n" +
+                "期望结果：\n" +
+                "- \n\n" +
+                "附件：请附截图/问题图片（如方便）。";
+        }
+
+        private static bool TrySetClipboardText(string text)
+        {
+            try
+            {
+                Clipboard.SetText(text ?? string.Empty);
+                return true;
+            }
+            catch (COMException)
+            {
+                return false;
+            }
+            catch (ExternalException)
+            {
+                return false;
+            }
         }
 
         private void MenuHistoryCache_Click(object sender, RoutedEventArgs e)
@@ -3760,7 +3929,7 @@ namespace PicMark
             AddShortcutSection(content, "高频操作",
                 Tuple.Create("Ctrl + O", "打开图片"),
                 Tuple.Create("Ctrl + S", "保存"),
-                Tuple.Create("Ctrl + Shift + S", "另存为 / 压缩"),
+                Tuple.Create("Ctrl + Shift + S", "另存为"),
                 Tuple.Create("Ctrl + E", "切换查看 / 编辑"),
                 Tuple.Create("Ctrl + C", "复制当前结果到剪贴板"),
                 Tuple.Create("Ctrl + P", "打印"));
@@ -4061,6 +4230,7 @@ namespace PicMark
             {
                 TitleFileInfoText.Text = "见微 PicMark";
                 TitleFileInfoText.ToolTip = "见微 PicMark";
+                Title = "见微 PicMark";
                 return;
             }
 
@@ -4081,6 +4251,7 @@ namespace PicMark
 
             TitleFileInfoText.Text = title;
             TitleFileInfoText.ToolTip = title;
+            Title = title;
         }
 
         private void UpdateBottomOverlayConstraints()
@@ -4092,25 +4263,46 @@ namespace PicMark
             double zoomWidth = BottomZoomBar.ActualWidth;
             if (overlayWidth <= 0 || zoomWidth <= 0) return;
 
-            double sideWidth = Math.Max(0, (overlayWidth - zoomWidth) / 2.0 - 16);
+            const double centerOuterMargin = 24; // BottomZoomBar has 12px margin on both sides.
+            const double sideSafetyGap = 18;
+            double sideWidth = Math.Max(0, (overlayWidth - zoomWidth - centerOuterMargin) / 2.0 - sideSafetyGap);
             if (RightBottomBadges != null)
+            {
                 RightBottomBadges.MaxWidth = sideWidth;
+                RightBottomBadges.Margin = sideWidth > 0 ? new Thickness(12, 0, 0, 0) : new Thickness(0);
+            }
 
-            if (sideWidth < 220)
+            if (StatusBadge != null)
+            {
+                StatusBadge.MaxWidth = Math.Max(86, sideWidth);
+                StatusText.MaxWidth = Math.Max(58, sideWidth - 20);
+            }
+
+            if (Canvas1.Image == null || sideWidth < 190)
             {
                 CurrentFileBadge.Visibility = Visibility.Collapsed;
-                ImageInfoBadge.MaxWidth = Math.Max(120, sideWidth);
-                ImageInfoText.MaxWidth = Math.Max(92, sideWidth - 18);
+                ImageInfoBadge.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            CurrentFileBadge.Visibility = Canvas1.Image == null ? Visibility.Collapsed : Visibility.Visible;
-            double infoBadgeWidth = Math.Min(230, Math.Max(142, sideWidth * 0.54));
-            double fileBadgeWidth = Math.Min(240, Math.Max(86, sideWidth - infoBadgeWidth - 8));
+            ImageInfoBadge.Visibility = Visibility.Visible;
+            bool showFileBadge = sideWidth >= 430;
+            CurrentFileBadge.Visibility = showFileBadge ? Visibility.Visible : Visibility.Collapsed;
+
+            double infoBadgeWidth = showFileBadge
+                ? Math.Min(210, Math.Max(148, sideWidth * 0.48))
+                : Math.Min(250, Math.Max(132, sideWidth - 12));
+            double fileBadgeWidth = showFileBadge
+                ? Math.Min(230, Math.Max(104, sideWidth - infoBadgeWidth - 20))
+                : 0;
 
             ImageInfoBadge.MaxWidth = infoBadgeWidth;
             ImageInfoText.MaxWidth = Math.Max(90, infoBadgeWidth - 18);
-            CurrentFileBadge.MaxWidth = fileBadgeWidth;
+            if (showFileBadge)
+            {
+                CurrentFileBadge.MaxWidth = fileBadgeWidth;
+                CurrentFileText.MaxWidth = Math.Max(62, fileBadgeWidth - 20);
+            }
         }
 
         private void AddRecentFile(string path)
