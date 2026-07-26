@@ -1,5 +1,51 @@
 # PicMark Handoff Memo
 
+## 🟢 最近一次会话改动日志（2026-07-27，优先看这里）
+
+本次会话围绕"批量裁切体验 + 保存菜单文案 + 小屏/高 DPI 适配 + Win11 排错"做了以下改动，均未做运行时验证（本机缺 .NET 4.7.2 Targeting Pack，msbuild 跑不通），**接手后建议先在 VS 里 F5 编译跑一遍**。
+
+### 1. 批量裁切默认打开当前图片所在文件夹
+- `MainWindow.BtnBatchCrop_Click` 传 `_currentFilePath` 给 `BatchCropWindow`
+- `BatchCropWindow` 新增 `currentImagePath` 构造参数 + `ResolveInitialDirectory` 方法
+- 文件/文件夹对话框的 `InitialDirectory`/`SelectedPath` 设为当前图片所在目录
+- 涉及文件：`BatchCropWindow.xaml.cs`、`MainWindow.xaml.cs`
+
+### 2. 保存菜单调整
+- 保存下拉菜单顺序调整为：另存为 → 保存工程文件 → 覆盖原图 → 复制到剪贴板
+- "另存为 / 压缩" 全局改名为"另存为"（popup 菜单、右键菜单、最近操作标签、快捷键帮助）
+- "保存项目（可继续编辑）" 改名为"保存工程文件"
+- 涉及文件：`MainWindow.xaml`、`MainWindow.xaml.cs`
+
+### 3. Windows 资源管理器右键"批量裁切（当前文件夹）..."
+- 新增 shell 上下文菜单项，右键图片或文件夹均可触发
+- 命令格式：`PicMark.exe /batchcrop "%1"`
+- `App.xaml.cs` 解析 `/batchcrop` 参数 → `MainWindow.OpenBatchCropForPath` → `BatchCropWindow.AddFolderImages` 自动加载目录图片
+- 注册脚本 `Register-PicMarkFileTypes.ps1` / `Unregister-PicMarkFileTypes.ps1` / `PicMark.iss` 均已同步
+- 涉及文件：`App.xaml.cs`、`MainWindow.xaml.cs`、`BatchCropWindow.xaml.cs`、3 个 installer 文件
+
+### 4. 小屏/高 DPI 缩放适配（用户反馈：小笔记本上界面撑爆、底部按钮看不见）
+- **A1**：`MinimumWindowWidth/Height` 从写死 `1180×720` 改为 `Max(下限, Min(上限, WorkArea×0.96))`，小屏自动缩到 640×420~WorkArea
+- **A2**：`ApplyWindowSettings` 把保存的 Width/Height/Left/Top 全部 clamp 到 WorkArea
+- **A3**：新增 `MainWindow_DpiChanged` 事件处理，跨显示器拖动后重新 clamp 窗口
+- **A4**：`ApplyWindowFrame` 最大化时给 `WindowShell` 加 Padding（=屏幕外溢量），`ResizeBorderThickness` 设为 0，防止内容延伸到任务栏下方
+- 涉及文件：`MainWindow.xaml.cs`
+
+### 5. Win11 排错与子窗口适配
+- **B1**：修复缩放下拉乱码 `Content="閫傚簲"` → `"适应"`（`MainWindow.xaml:1217`）
+- **B2**：`BatchCropWindow`（720×880）、`SaveOptionsDialog`（820×620）、`FormatConvertWindow`（900×610, min 820×560）构造时 clamp 到 WorkArea
+- **C1**：`Win7Helper` 新增 `IsWin11OrNewer`（Build≥22000）属性，供后续按版本分支
+- 涉及文件：`MainWindow.xaml`、`BatchCropWindow.xaml.cs`、`SaveOptionsDialog.xaml.cs`、`FormatConvertWindow.cs`、`Win7Helper.cs`
+
+### 待验证项
+- [ ] VS F5 编译通过
+- [ ] 1366×768 @150% 缩放下窗口正常显示、底部按钮可见
+- [ ] 最大化时底部缩放栏不被任务栏遮挡
+- [ ] 跨屏拖动（100%→150%）窗口自动 clamp
+- [ ] 资源管理器右键图片/文件夹 → "批量裁切（当前文件夹）..." → 见微启动并自动加载目录图片
+- [ ] 缩放下拉第一项显示"适应"而非乱码
+
+---
+
 ## 🔵 当前交接任务：看图浏览器模块（2026-06-18 新增，优先看这里）
 
 **要做什么**：实现 `PRD.md` 第 12 节"看图浏览器模块（新功能规划，参考 2345看图王）"。那一节是讨论后定稿的完整大纲（背景目标、设计原则、P0/P1/Out of Scope 功能表、用户流程、技术方案要点、待定问题），**开始写代码前先完整读一遍 PRD 第 12 节，它是唯一的需求来源**，本节只补充 PRD 里没写的、纯工程实现层面的上下文。

@@ -1,4 +1,4 @@
-﻿; 见微 PicMark 安装脚本
+; 见微 PicMark 安装脚本
 ; 用 Inno Setup (https://jrsoftware.org/isinfo.php) 编译: ISCC.exe PicMark.iss
 ;
 ; 运行库策略：
@@ -132,6 +132,32 @@ Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMark\command"; ValueType: st
 Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
 Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
+
+; 右键菜单：批量裁切（当前文件夹）...
+Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+
+Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+
+Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+
+Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+
+Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+
+; 右键文件夹：批量裁切（当前文件夹）
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
 
 [Code]
 function NeedsDotNet472: Boolean;

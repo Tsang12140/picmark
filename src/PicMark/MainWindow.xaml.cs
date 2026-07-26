@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -25,8 +25,9 @@ namespace PicMark
         private static readonly string[] SaveableExtensions = { ".jpg", ".jpeg", ".png", ".bmp", ".webp" };
         private const string ProjectExtension = ".picmark";
         private const double RightEditPanelWidth = 342;
-        private const double MinimumWindowWidth = 1180;
-        private const double MinimumWindowHeight = 720;
+        // 最小窗口尺寸按 WorkArea 自适应：大屏保持 1180×720，小屏（高 DPI 缩放）缩到 96% 工作区，但不低于 640×420
+        private static double MinimumWindowWidth => Math.Max(640, Math.Min(1180, SystemParameters.WorkArea.Width * 0.96));
+        private static double MinimumWindowHeight => Math.Max(420, Math.Min(720, SystemParameters.WorkArea.Height * 0.96));
 
         private string _currentFilePath;
         private string _currentProjectPath;
@@ -101,6 +102,7 @@ namespace PicMark
             Closing += MainWindow_Closing;
             StateChanged += MainWindow_StateChanged;
             SizeChanged += MainWindow_SizeChanged;
+            DpiChanged += MainWindow_DpiChanged;
             Scroller.PreviewMouseWheel += Scroller_PreviewMouseWheel;
             Scroller.PreviewMouseLeftButtonDown += Scroller_PreviewMouseLeftButtonDown;
             Scroller.PreviewMouseMove += Scroller_PreviewMouseMove;
@@ -146,6 +148,30 @@ namespace PicMark
             if (_fitToWindow && Canvas1.Image != null)
                 FitImageAfterLayout();
             UpdateBottomOverlayConstraints();
+        }
+
+        private void MainWindow_DpiChanged(object sender, DpiChangedEventArgs e)
+        {
+            // 跨显示器拖动导致 DPI 变化后，重新 clamp 窗口尺寸/位置到当前工作区
+            var work = SystemParameters.WorkArea;
+            double minW = MinimumWindowWidth;
+            double minH = MinimumWindowHeight;
+
+            MinWidth = minW;
+            MinHeight = minH;
+
+            if (WindowState == WindowState.Normal)
+            {
+                double w = Math.Min(Math.Max(minW, Width), work.Width);
+                double h = Math.Min(Math.Max(minH, Height), work.Height);
+                Width = w;
+                Height = h;
+
+                double left = Math.Max(work.Left, Math.Min(Left, work.Right - Math.Min(w, 200)));
+                double top = Math.Max(work.Top, Math.Min(Top, work.Bottom - 40));
+                Left = left;
+                Top = top;
+            }
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -319,16 +345,29 @@ namespace PicMark
 
         private void ApplyWindowSettings()
         {
-            MinWidth = MinimumWindowWidth;
-            MinHeight = MinimumWindowHeight;
-            Width = Math.Max(MinimumWindowWidth, _settings.WindowWidth);
-            Height = Math.Max(MinimumWindowHeight, _settings.WindowHeight);
+            var work = SystemParameters.WorkArea;
+            double minW = MinimumWindowWidth;
+            double minH = MinimumWindowHeight;
+
+            MinWidth = minW;
+            MinHeight = minH;
+
+            // clamp 保存的窗口尺寸到当前工作区，防止小屏上窗口超出
+            double w = Math.Min(Math.Max(minW, _settings.WindowWidth), work.Width);
+            double h = Math.Min(Math.Max(minH, _settings.WindowHeight), work.Height);
+            Width = w;
+            Height = h;
+
             if (!double.IsNaN(_settings.WindowLeft) && !double.IsNaN(_settings.WindowTop))
             {
                 WindowStartupLocation = WindowStartupLocation.Manual;
-                Left = _settings.WindowLeft;
-                Top = _settings.WindowTop;
+                // 确保标题栏可见：左上不超出工作区，右下留出至少 200px 可见区域
+                double left = Math.Max(work.Left, Math.Min(_settings.WindowLeft, work.Right - Math.Min(w, 200)));
+                double top = Math.Max(work.Top, Math.Min(_settings.WindowTop, work.Bottom - 40));
+                Left = left;
+                Top = top;
             }
+
             if (_settings.WindowState == WindowState.Maximized)
                 WindowState = WindowState.Maximized;
         }
@@ -863,15 +902,33 @@ namespace PicMark
         {
             if (WindowShell == null) return;
 
-            if (WindowState == WindowState.Maximized)
+            var chrome = WindowChrome.GetWindowChrome(this);
+            bool maximized = WindowState == WindowState.Maximized;
+
+            if (maximized)
             {
                 WindowShell.CornerRadius = new CornerRadius(0);
                 WindowShell.BorderThickness = new Thickness(0);
+
+                // WindowChrome 最大化时窗口可能覆盖整个屏幕（含任务栏区域），手动留出任务栏空间
+                var work = SystemParameters.WorkArea;
+                double padTop = Math.Max(0, work.Top);
+                double padBottom = Math.Max(0, SystemParameters.PrimaryScreenHeight - work.Bottom);
+                double padLeft = Math.Max(0, work.Left);
+                double padRight = Math.Max(0, SystemParameters.PrimaryScreenWidth - work.Right);
+                WindowShell.Padding = new Thickness(padLeft, padTop, padRight, padBottom);
+
+                if (chrome != null)
+                    chrome.ResizeBorderThickness = new Thickness(0);
             }
             else
             {
                 WindowShell.CornerRadius = new CornerRadius(8);
                 WindowShell.BorderThickness = new Thickness(1);
+                WindowShell.Padding = new Thickness(0);
+
+                if (chrome != null)
+                    chrome.ResizeBorderThickness = new Thickness(4);
             }
 
             WindowShell.Background = editMode ? BrushFromRgb(0x1C, 0x1C, 0x1C) : BrushFromRgb(0xF2, 0xF6, 0xF8);
@@ -1815,7 +1872,32 @@ namespace PicMark
 
         private void BtnBatchCrop_Click(object sender, RoutedEventArgs e)
         {
-            var window = new BatchCropWindow { Owner = this };
+            var window = new BatchCropWindow(_currentFilePath) { Owner = this };
+            window.ShowDialog();
+        }
+
+        public void OpenBatchCropForPath(string targetPath)
+        {
+            string folder = null;
+            string currentImage = null;
+
+            if (!string.IsNullOrWhiteSpace(targetPath))
+            {
+                if (Directory.Exists(targetPath))
+                {
+                    folder = targetPath;
+                    currentImage = targetPath; // 传目录路径，供 BatchCropWindow 推导 _initialDirectory
+                }
+                else if (File.Exists(targetPath))
+                {
+                    currentImage = targetPath;
+                    try { folder = Path.GetDirectoryName(targetPath); } catch { }
+                }
+            }
+
+            var window = new BatchCropWindow(currentImage) { Owner = this };
+            if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
+                window.AddFolderImages(folder);
             window.ShowDialog();
         }
 
@@ -2890,7 +2972,7 @@ namespace PicMark
                 case "CopyImage":
                     return "复制图片";
                 case "SaveAs":
-                    return "另存为 / 压缩";
+                    return "另存为";
                 case "Print":
                     return "打印";
                 case "Crop":
@@ -3760,7 +3842,7 @@ namespace PicMark
             AddShortcutSection(content, "高频操作",
                 Tuple.Create("Ctrl + O", "打开图片"),
                 Tuple.Create("Ctrl + S", "保存"),
-                Tuple.Create("Ctrl + Shift + S", "另存为 / 压缩"),
+                Tuple.Create("Ctrl + Shift + S", "另存为"),
                 Tuple.Create("Ctrl + E", "切换查看 / 编辑"),
                 Tuple.Create("Ctrl + C", "复制当前结果到剪贴板"),
                 Tuple.Create("Ctrl + P", "打印"));

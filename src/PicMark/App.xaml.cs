@@ -16,8 +16,19 @@ namespace PicMark
                 var args = Environment.GetCommandLineArgs()
                     .Skip(1)
                     .Concat(e.Args ?? new string[0])
-                    .Distinct(StringComparer.OrdinalIgnoreCase);
-                window.OpenInitialFiles(args);
+                    .ToArray();
+
+                int batchCropIndex = Array.FindIndex(args, a =>
+                    string.Equals(a, "/batchcrop", StringComparison.OrdinalIgnoreCase));
+
+                if (batchCropIndex >= 0 && batchCropIndex + 1 < args.Length)
+                {
+                    window.OpenBatchCropForPath(args[batchCropIndex + 1]);
+                }
+                else
+                {
+                    window.OpenInitialFiles(args.Distinct(StringComparer.OrdinalIgnoreCase));
+                }
             }), DispatcherPriority.ApplicationIdle);
         }
     }

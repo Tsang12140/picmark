@@ -67,6 +67,11 @@ namespace PicMark
             DragOver += Window_DragOver;
             Drop += Window_Drop;
 
+            // 小屏适配：clamp 到工作区
+            var work = SystemParameters.WorkArea;
+            if (Width > work.Width) { Width = work.Width; MinWidth = Math.Max(640, work.Width); }
+            if (Height > work.Height) { Height = work.Height; MinHeight = Math.Max(420, work.Height); }
+
             _sourcePath = initialFiles?.FirstOrDefault(path => File.Exists(path) && ImageConversionService.IsSupportedInput(path));
             if (_sourcePath == null && initialBitmap != null)
             {

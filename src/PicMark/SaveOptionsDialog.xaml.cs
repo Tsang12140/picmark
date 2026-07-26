@@ -29,6 +29,11 @@ namespace PicMark
             _source = source;
             _sourceWidth = source.PixelWidth;
             _sourceHeight = source.PixelHeight;
+
+            // 小屏适配：clamp 到工作区
+            var work = SystemParameters.WorkArea;
+            if (Width > work.Width) Width = work.Width;
+            if (Height > work.Height) Height = work.Height;
             PreviewImage.Source = source;
 
             string baseDir = !string.IsNullOrWhiteSpace(currentPath)

@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$ExePath = "",
     [switch]$NoPause
 )
@@ -58,6 +58,8 @@ $projectProgId = "PicMark.Project"
 $exeName = [IO.Path]::GetFileName($ExePath)
 $openCommand = '"' + $ExePath + '" "%1"'
 $quotedExe = '"' + $ExePath + '"'
+$batchCropCommand = '"' + $ExePath + '" /batchcrop "%1"'
+$batchCropLabel = "批量裁切（当前文件夹）..."
 $imageExtensions = @(".jpg", ".jpeg", ".png", ".bmp", ".webp")
 $projectExtensions = @(".picmark")
 $classesRoot = "Registry::HKEY_CURRENT_USER\Software\Classes"
@@ -91,7 +93,15 @@ foreach ($ext in $imageExtensions) {
     Set-RegString "$classesRoot\$ext\shell\PicMark" "" "用见微打开"
     Set-RegString "$classesRoot\$ext\shell\PicMark" "Icon" $quotedExe
     Set-RegString "$classesRoot\$ext\shell\PicMark\command" "" $openCommand
+    Set-RegString "$classesRoot\$ext\shell\PicMarkBatchCrop" "" $batchCropLabel
+    Set-RegString "$classesRoot\$ext\shell\PicMarkBatchCrop" "Icon" $quotedExe
+    Set-RegString "$classesRoot\$ext\shell\PicMarkBatchCrop\command" "" $batchCropCommand
 }
+
+# 右键文件夹：批量裁切（当前文件夹）
+Set-RegString "$classesRoot\Directory\shell\PicMarkBatchCrop" "" $batchCropLabel
+Set-RegString "$classesRoot\Directory\shell\PicMarkBatchCrop" "Icon" $quotedExe
+Set-RegString "$classesRoot\Directory\shell\PicMarkBatchCrop\command" "" $batchCropCommand
 
 Set-RegString "$classesRoot\$projectProgId" "" "见微 PicMark 项目"
 Set-RegString "$classesRoot\$projectProgId" "FriendlyTypeName" "见微 PicMark 项目"

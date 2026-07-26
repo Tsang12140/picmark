@@ -11,11 +11,15 @@ namespace PicMark
     {
         private static bool? _isDwmEnabled;
         private static readonly bool? _isWin7OrOlder;
+        private static readonly bool? _isWin11OrNewer;
 
         static Win7Helper()
         {
-            _isWin7OrOlder = Environment.OSVersion.Version.Major < 6
-                         || (Environment.OSVersion.Version.Major == 6 && Environment.OSVersion.Version.Minor <= 1);
+            var v = Environment.OSVersion.Version;
+            _isWin7OrOlder = v.Major < 6
+                         || (v.Major == 6 && v.Minor <= 1);
+            // Win11 = 10.0.22000+
+            _isWin11OrNewer = v.Major >= 10 && v.Build >= 22000;
         }
 
         /// <summary>
@@ -45,6 +49,11 @@ namespace PicMark
         /// 是否为 Windows 7 或更早版本。
         /// </summary>
         public static bool IsWin7OrOlder => _isWin7OrOlder ?? true;
+
+        /// <summary>
+        /// 是否为 Windows 11 或更新版本（Build ≥ 22000）。
+        /// </summary>
+        public static bool IsWin11OrNewer => _isWin11OrNewer ?? false;
 
         /// <summary>
         /// WindowChrome 是否可用（需要 DWM 开启）。

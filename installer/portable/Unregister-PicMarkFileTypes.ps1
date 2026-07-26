@@ -61,7 +61,10 @@ Remove-RegKey "$classesRoot\Applications\PicMark.exe"
 foreach ($ext in $extensions) {
     Remove-RegValue "$classesRoot\$ext\OpenWithProgids" "PicMark.Image"
     Remove-RegKey "$classesRoot\$ext\shell\PicMark"
+    Remove-RegKey "$classesRoot\$ext\shell\PicMarkBatchCrop"
 }
+
+Remove-RegKey "$classesRoot\Directory\shell\PicMarkBatchCrop"
 
 Notify-Shell
 

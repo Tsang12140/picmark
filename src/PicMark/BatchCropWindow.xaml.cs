@@ -29,12 +29,35 @@ namespace PicMark
         private double _marginTopPct, _marginBottomPct, _marginLeftPct, _marginRightPct;
         private DragEdge _dragEdge = DragEdge.None;
 
-        public BatchCropWindow()
+        private readonly string _initialDirectory;
+
+        public BatchCropWindow() : this(null) { }
+
+        public BatchCropWindow(string currentImagePath)
         {
             InitializeComponent();
             _presets = BatchCropPresetStore.Load();
+            _initialDirectory = ResolveInitialDirectory(currentImagePath);
             RefreshPresetCombo();
             RefreshFileList();
+
+            // 小屏适配：clamp 到工作区
+            var work = SystemParameters.WorkArea;
+            if (Width > work.Width) Width = work.Width;
+            if (Height > work.Height) Height = work.Height;
+        }
+
+        private static string ResolveInitialDirectory(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            try
+            {
+                if (Directory.Exists(path)) return path;
+                string dir = Path.GetDirectoryName(path);
+                if (!string.IsNullOrWhiteSpace(dir) && Directory.Exists(dir)) return dir;
+            }
+            catch { /* 忽略非法路径，回退到默认 */ }
+            return null;
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) => DragMove();
@@ -106,6 +129,8 @@ namespace PicMark
                 Multiselect = true,
                 Filter = "图片文件|*.jpg;*.jpeg;*.png;*.bmp;*.webp"
             };
+            if (!string.IsNullOrEmpty(_initialDirectory))
+                dlg.InitialDirectory = _initialDirectory;
             if (dlg.ShowDialog(this) != true) return;
             bool hadFiles = _filePaths.Count > 0;
             foreach (var path in dlg.FileNames)
@@ -118,15 +143,23 @@ namespace PicMark
         {
             using (var dlg = new WinForms.FolderBrowserDialog())
             {
+                if (!string.IsNullOrEmpty(_initialDirectory) && Directory.Exists(_initialDirectory))
+                    dlg.SelectedPath = _initialDirectory;
                 if (dlg.ShowDialog() != WinForms.DialogResult.OK) return;
-                bool hadFiles = _filePaths.Count > 0;
-                var found = Directory.EnumerateFiles(dlg.SelectedPath)
-                    .Where(p => Array.IndexOf(SupportedExtensions, Path.GetExtension(p).ToLowerInvariant()) >= 0);
-                foreach (var path in found)
-                    if (!_filePaths.Contains(path)) _filePaths.Add(path);
-                RefreshFileList();
-                if (!hadFiles && _filePaths.Count > 0) SetSample(_filePaths[0]);
+                AddFolderImages(dlg.SelectedPath);
             }
+        }
+
+        public void AddFolderImages(string folder)
+        {
+            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return;
+            bool hadFiles = _filePaths.Count > 0;
+            var found = Directory.EnumerateFiles(folder)
+                .Where(p => Array.IndexOf(SupportedExtensions, Path.GetExtension(p).ToLowerInvariant()) >= 0);
+            foreach (var path in found)
+                if (!_filePaths.Contains(path)) _filePaths.Add(path);
+            RefreshFileList();
+            if (!hadFiles && _filePaths.Count > 0) SetSample(_filePaths[0]);
         }
 
         private void RemoveSelected_Click(object sender, RoutedEventArgs e)
