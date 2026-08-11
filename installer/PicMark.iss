@@ -7,7 +7,7 @@
 ;  以上均需要安装时联网（与绝大多数 Windows 应用安装器的前提一致）；若用户机器已满足条件，则不会触发任何下载。
 
 #define MyAppName "见微 PicMark"
-#define MyAppVersion "0.2.3"
+#define MyAppVersion "0.3.0"
 #define MyAppPublisher "PicMark"
 #define MyAppExeName "PicMark.exe"
 #define MyBuildOutput "..\src\PicMark\bin\Release"
@@ -17,7 +17,7 @@ AppId={{B7E1B6B0-6B2E-4E8B-9C8B-2F6F1F3A9001}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
-DefaultDirName={localappdata}\Programs\PicMark
+DefaultDirName={autopf}\PicMark
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=Output
@@ -26,9 +26,9 @@ Compression=lzma2
 SolidCompression=yes
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=..\src\PicMark\App.ico
-LicenseFile=..\LICENSE
+LicenseFile=..\LICENSE.zh-CN.txt
 UninstallDisplayIcon={app}\{#MyAppExeName}
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 WizardStyle=modern
 MinVersion=6.1sp1
 
@@ -37,7 +37,8 @@ Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加任务："
-Name: "contextmenu"; Description: "在图片右键菜单中添加“用见微打开”"; GroupDescription: "附加任务："; Flags: unchecked
+Name: "contextmenu"; Description: "在图片右键菜单中添加“用见微打开”"; GroupDescription: "附加任务："; Flags: checkedonce
+Name: "batchcropmenu"; Description: "在图片和文件夹右键菜单中添加“批量裁切”"; GroupDescription: "附加任务："; Flags: checkedonce
 Name: "fileassoc"; Description: "注册为图片打开方式候选应用"; GroupDescription: "附加任务："; Flags: unchecked
 
 [Files]
@@ -47,6 +48,7 @@ Source: "{#MyBuildOutput}\x86\*"; DestDir: "{app}\x86"; Flags: ignoreversion rec
 Source: "{#MyBuildOutput}\x64\*"; DestDir: "{app}\x64"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "{#MyBuildOutput}\arm64\*"; DestDir: "{app}\arm64"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "..\LICENSE.zh-CN.txt"; DestDir: "{app}"; DestName: "许可协议（中文）.txt"; Flags: ignoreversion
 ; 运行库静默安装包（编译前需放入 redist\ 目录，见本目录 README）
 Source: "redist\ndp472-web.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
 Source: "redist\vc_redist.x86.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall skipifsourcedoesntexist
@@ -108,58 +110,113 @@ Root: HKCU; Subkey: "Software\Classes\PicMark.Project\shell\open\command"; Value
 
 Root: HKCU; Subkey: "Software\Classes\.picmark"; ValueType: string; ValueName: ""; ValueData: "PicMark.Project"; Tasks: fileassoc; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\.picmark\OpenWithProgids"; ValueType: string; ValueName: "PicMark.Project"; ValueData: ""; Tasks: fileassoc
-Root: HKCU; Subkey: "Software\Classes\.picmark\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "打开 PicMark 项目"; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.picmark\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.picmark\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: ".picmark\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "打开 PicMark 项目"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: ".picmark\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCR; Subkey: ".picmark\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
 ; 右键菜单：用见微打开（按扩展名分别注册，避免污染所有文件类型）
-Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.jpg\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.jpg\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.jpg\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
-Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.jpeg\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.jpeg\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.jpeg\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
-Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.png\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.png\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.png\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
-Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.bmp\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.bmp\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.bmp\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
-Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.webp\shell\PicMark"; ValueType: string; ValueName: ""; ValueData: "用见微打开"; Tasks: contextmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.webp\shell\PicMark"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.webp\shell\PicMark\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: contextmenu
 
 ; 右键菜单：批量裁切（当前文件夹）...
-Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.jpg\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.jpg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: batchcropmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.jpg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: batchcropmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.jpg\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: batchcropmenu
 
-Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.jpeg\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.jpeg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: batchcropmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.jpeg\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: batchcropmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.jpeg\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: batchcropmenu
 
-Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.png\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.png\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: batchcropmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.png\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: batchcropmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.png\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: batchcropmenu
 
-Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.bmp\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.bmp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: batchcropmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.bmp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: batchcropmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.bmp\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: batchcropmenu
 
-Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\.webp\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.webp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: batchcropmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "SystemFileAssociations\.webp\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: batchcropmenu
+Root: HKCR; Subkey: "SystemFileAssociations\.webp\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: batchcropmenu
 
 ; 右键文件夹：批量裁切（当前文件夹）
-Root: HKCU; Subkey: "Software\Classes\Directory\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: contextmenu; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\Directory\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: contextmenu
-Root: HKCU; Subkey: "Software\Classes\Directory\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: contextmenu
+Root: HKCR; Subkey: "Directory\shell\PicMarkBatchCrop"; ValueType: string; ValueName: ""; ValueData: "批量裁切（当前文件夹）..."; Tasks: batchcropmenu; Flags: uninsdeletekey
+Root: HKCR; Subkey: "Directory\shell\PicMarkBatchCrop"; ValueType: string; ValueName: "Icon"; ValueData: """{app}\{#MyAppExeName}"""; Tasks: batchcropmenu
+Root: HKCR; Subkey: "Directory\shell\PicMarkBatchCrop\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" /batchcrop ""%1"""; Tasks: batchcropmenu
 
 [Code]
+const
+  PerUserInstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B7E1B6B0-6B2E-4E8B-9C8B-2F6F1F3A9001}_is1';
+
+function ExtractExecutablePath(const CommandLine: String): String;
+var
+  EndQuote: Integer;
+begin
+  Result := CommandLine;
+  if (Length(Result) > 0) and (Result[1] = '"') then
+  begin
+    Delete(Result, 1, 1);
+    EndQuote := Pos('"', Result);
+    if EndQuote > 0 then
+      Result := Copy(Result, 1, EndQuote - 1);
+  end
+  else
+  begin
+    EndQuote := Pos(' ', Result);
+    if EndQuote > 0 then
+      Result := Copy(Result, 1, EndQuote - 1);
+  end;
+end;
+
+function RemoveLegacyPerUserInstall(): String;
+var
+  UninstallString, Uninstaller: String;
+  ResultCode: Integer;
+begin
+  Result := '';
+  if not RegQueryStringValue(HKCU, PerUserInstallKey, 'UninstallString', UninstallString) then
+    Exit;
+
+  Uninstaller := ExtractExecutablePath(UninstallString);
+  if not FileExists(Uninstaller) then
+  begin
+    Result := '检测到旧的当前用户版 PicMark，但找不到其卸载程序。请先在 Geek 卸载程序中卸载该版本，再重新运行本安装包。';
+    Exit;
+  end;
+
+  if not Exec(Uninstaller, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+  begin
+    Result := '无法自动卸载旧的当前用户版 PicMark。请先在 Geek 卸载程序中卸载该版本，再重新运行本安装包。';
+    Exit;
+  end;
+
+  if ResultCode <> 0 then
+    Result := '旧的当前用户版 PicMark 卸载未完成（错误代码 ' + IntToStr(ResultCode) + '）。请先在 Geek 卸载程序中卸载该版本，再重新运行本安装包。';
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  NeedsRestart := False;
+  Result := RemoveLegacyPerUserInstall();
+end;
+
 function NeedsDotNet472: Boolean;
 var
   release: Cardinal;

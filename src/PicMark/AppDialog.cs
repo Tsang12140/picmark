@@ -18,17 +18,31 @@ namespace PicMark
             dialog.ShowDialog();
             return dialog.Result;
         }
+
+        public static bool ShowWithPrimaryAction(Window owner, string message, string title, string primaryActionText, string closeText = "关闭")
+        {
+            var dialog = new AppDialogWindow(title, message, MessageBoxButton.OK, primaryActionText, closeText)
+            {
+                Owner = owner
+            };
+            dialog.ShowDialog();
+            return dialog.Result == MessageBoxResult.Yes;
+        }
     }
 
     internal sealed class AppDialogWindow : Window
     {
         private readonly MessageBoxButton _buttons;
+        private readonly string _primaryActionText;
+        private readonly string _closeText;
 
         public MessageBoxResult Result { get; private set; }
 
-        public AppDialogWindow(string title, string message, MessageBoxButton buttons)
+        public AppDialogWindow(string title, string message, MessageBoxButton buttons, string primaryActionText = null, string closeText = null)
         {
             _buttons = buttons;
+            _primaryActionText = primaryActionText;
+            _closeText = closeText;
             Result = DefaultResult(buttons);
 
             Width = 520;
@@ -133,6 +147,13 @@ namespace PicMark
 
         private void AddButtons(Panel actions)
         {
+            if (!string.IsNullOrWhiteSpace(_primaryActionText))
+            {
+                actions.Children.Add(MakeButton(_primaryActionText, MessageBoxResult.Yes, true));
+                actions.Children.Add(MakeButton(string.IsNullOrWhiteSpace(_closeText) ? "关闭" : _closeText, MessageBoxResult.Cancel, false));
+                return;
+            }
+
             switch (_buttons)
             {
                 case MessageBoxButton.OKCancel:

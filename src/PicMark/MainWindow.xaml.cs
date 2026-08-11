@@ -6,6 +6,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -25,9 +26,9 @@ namespace PicMark
         private static readonly string[] SaveableExtensions = { ".jpg", ".jpeg", ".png", ".bmp", ".webp" };
         private const string ProjectExtension = ".picmark";
         private const double RightEditPanelWidth = 342;
-        // 最小窗口尺寸按 WorkArea 自适应：大屏保持 1180×720，小屏（高 DPI 缩放）缩到 96% 工作区，但不低于 640×420
-        private static double MinimumWindowWidth => Math.Max(640, Math.Min(1180, SystemParameters.WorkArea.Width * 0.96));
-        private static double MinimumWindowHeight => Math.Max(420, Math.Min(720, SystemParameters.WorkArea.Height * 0.96));
+        // 最小窗口尺寸按 WorkArea 自适应：大屏保持 980×640，小屏（高 DPI 缩放）缩到 96% 工作区。
+        private static double MinimumWindowWidth => Math.Max(760, Math.Min(980, SystemParameters.WorkArea.Width * 0.96));
+        private static double MinimumWindowHeight => Math.Max(520, Math.Min(640, SystemParameters.WorkArea.Height * 0.96));
 
         private string _currentFilePath;
         private string _currentProjectPath;
@@ -57,6 +58,7 @@ namespace PicMark
         private WatermarkLayout _watermarkLayout = WatermarkLayout.Tiled;
         private bool _watermarkBold;
         private Color _watermarkColor = Colors.Black;
+        private bool _watermarkColorUserSelected;
         private string _watermarkFontFamily = "Microsoft YaHei UI";
         private string _watermarkLogoPath = string.Empty;
         private bool _watermarkLogoFlipHorizontal;
@@ -72,6 +74,13 @@ namespace PicMark
         private UpdateCheckResult _lastUpdateCheck;
         private string _telemetryUrl;
 
+        private sealed class OpenWithApplication
+        {
+            public string DisplayName { get; set; }
+            public string ExecutablePath { get; set; }
+            public string Arguments { get; set; }
+        }
+
         public MainWindow()
         {
             InitializeComponent();
@@ -85,6 +94,7 @@ namespace PicMark
             }
 
             _settings = AppSettings.Load();
+            EnsureInitialWindowLayout();
             ApplyWindowSettings();
             Canvas1.AnnotationsChanged += (s, e) => { if (!_loadingDocument) MarkDirty(); };
             Canvas1.SelectionChanged += Canvas1_SelectionChanged;
@@ -343,6 +353,19 @@ namespace PicMark
             e.Handled = true;
         }
 
+        private void EnsureInitialWindowLayout()
+        {
+            if (_settings.WindowLayoutInitialized) return;
+
+            _settings.WindowLeft = double.NaN;
+            _settings.WindowTop = double.NaN;
+            _settings.WindowWidth = 1080;
+            _settings.WindowHeight = 720;
+            _settings.WindowState = WindowState.Normal;
+            _settings.WindowLayoutInitialized = true;
+            _settings.Save();
+        }
+
         private void ApplyWindowSettings()
         {
             var work = SystemParameters.WorkArea;
@@ -537,9 +560,11 @@ namespace PicMark
                 string dir = Path.GetDirectoryName(currentPath);
                 if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
 
+                // 相机、手机导出的连续照片通常保留修改时间；按时间比按杂乱的文件名更接近用户眼中的“相邻照片”。
                 var files = Directory.EnumerateFiles(dir)
                     .Where(IsSupportedImagePath)
-                    .OrderBy(path => Path.GetFileName(path), StringComparer.CurrentCultureIgnoreCase)
+                    .OrderBy(path => GetFileLastWriteTimeUtc(path))
+                    .ThenBy(path => Path.GetFileName(path), StringComparer.CurrentCultureIgnoreCase)
                     .ToList();
                 SetViewerFiles(files, currentPath);
             }
@@ -559,6 +584,18 @@ namespace PicMark
 
         private static bool IsSupportedImagePath(string path) =>
             Array.IndexOf(SupportedExtensions, Path.GetExtension(path).ToLowerInvariant()) >= 0;
+
+        private static DateTime GetFileLastWriteTimeUtc(string path)
+        {
+            try
+            {
+                return File.GetLastWriteTimeUtc(path);
+            }
+            catch
+            {
+                return DateTime.MinValue;
+            }
+        }
 
         private void ViewerPrevButton_Click(object sender, RoutedEventArgs e) => GoToViewerIndex(_viewerIndex - 1);
         private void ViewerNextButton_Click(object sender, RoutedEventArgs e) => GoToViewerIndex(_viewerIndex + 1);
@@ -591,6 +628,8 @@ namespace PicMark
 
             ViewerPrevButton.IsEnabled = _viewerIndex > 0;
             ViewerNextButton.IsEnabled = _viewerIndex < _viewerFiles.Count - 1;
+            ViewerPrevButton.Opacity = ViewerPrevButton.IsEnabled ? 1 : 0.35;
+            ViewerNextButton.Opacity = ViewerNextButton.IsEnabled ? 1 : 0.35;
             ApplyViewerHotZones();
             UpdateTitleFileInfoText();
         }
@@ -635,10 +674,18 @@ namespace PicMark
                 return;
             }
 
-            ViewerBottomOverlay.Visibility = (_viewerBottomHot || _panMode) ? Visibility.Visible : Visibility.Collapsed;
+            bool showBottomOverlay = _viewerBottomHot || _panMode;
+            bool bottomOverlayWasVisible = ViewerBottomOverlay.Visibility == Visibility.Visible;
+            ViewerBottomOverlay.Visibility = showBottomOverlay ? Visibility.Visible : Visibility.Collapsed;
+            if (showBottomOverlay && !bottomOverlayWasVisible)
+            {
+                // Collapsed 状态下 ActualWidth 为 0；等布局完成再计算，避免右侧信息块被裁去左边框。
+                Dispatcher.BeginInvoke(new Action(UpdateBottomOverlayConstraints), DispatcherPriority.Loaded);
+            }
             bool hasList = _viewerFiles.Count > 1 && _viewerIndex >= 0;
-            ViewerPrevButton.Visibility = hasList && _viewerLeftHot ? Visibility.Visible : Visibility.Collapsed;
-            ViewerNextButton.Visibility = hasList && _viewerRightHot ? Visibility.Visible : Visibility.Collapsed;
+            // 翻页是查看器的主操作，不再要求鼠标先碰到窗口边缘才出现。
+            ViewerPrevButton.Visibility = hasList ? Visibility.Visible : Visibility.Collapsed;
+            ViewerNextButton.Visibility = hasList ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void LoadImage(string path, bool updateViewerList = true)
@@ -735,32 +782,54 @@ namespace PicMark
 
         private void PasteFromClipboard()
         {
-            if (!Clipboard.ContainsImage())
+            try
             {
-                UpdateStatus("剪贴板里没有图片");
-                return;
-            }
-            var src = Clipboard.GetImage();
-            if (src == null) return;
-            if (!ConfirmDiscardUnsavedChanges("粘贴新图片")) return;
-            if (src.CanFreeze) src.Freeze();
+                if (!Clipboard.ContainsImage())
+                {
+                    UpdateStatus("剪贴板里没有图片");
+                    return;
+                }
+                var src = Clipboard.GetImage();
+                if (src == null)
+                {
+                    UpdateStatus("剪贴板图片格式暂不支持");
+                    return;
+                }
+                if (!ConfirmDiscardUnsavedChanges("粘贴新图片")) return;
+                if (src.CanFreeze) src.Freeze();
 
-            ClearBatch();
-            Canvas1.Image = src;
-            Canvas1.ClearAll();
-            SetImageWorkspaceVisible(true);
-            _currentFilePath = null;
-            _currentProjectPath = null;
-            _currentExtension = ".png";
-            _hasUnsavedChanges = false;
-            SetCurrentFileName("剪贴板图片.png");
-            UpdateImageInfo(src, null);
-            _viewerFiles.Clear();
-            _viewerIndex = -1;
-            SetEditMode(false, false);
-            FitImageAfterLayout();
-            UpdateStatus("已粘贴剪贴板图片，保存时请选择保存位置");
-            UpdateViewerNavigation();
+                ClearBatch();
+                Canvas1.Image = src;
+                Canvas1.ClearAll();
+                SetImageWorkspaceVisible(true);
+                _currentFilePath = null;
+                _currentProjectPath = null;
+                _currentExtension = ".png";
+                _hasUnsavedChanges = false;
+                SetCurrentFileName("剪贴板图片.png");
+                UpdateImageInfo(src, null);
+                _viewerFiles.Clear();
+                _viewerIndex = -1;
+                SetEditMode(false, false);
+                FitImageAfterLayout();
+                UpdateStatus("已粘贴剪贴板图片，保存时请选择保存位置");
+                UpdateViewerNavigation();
+            }
+            catch (COMException ex)
+            {
+                UpdateStatus("读取剪贴板失败");
+                AppDialog.Show(this, $"读取剪贴板图片失败：{ex.Message}", "粘贴失败");
+            }
+            catch (ExternalException ex)
+            {
+                UpdateStatus("读取剪贴板失败");
+                AppDialog.Show(this, $"读取剪贴板图片失败：{ex.Message}", "粘贴失败");
+            }
+            catch (Exception ex)
+            {
+                UpdateStatus("读取剪贴板失败");
+                AppDialog.Show(this, $"读取剪贴板图片失败：{ex.Message}", "粘贴失败");
+            }
         }
 
         private void FitImageAfterLayout()
@@ -907,6 +976,7 @@ namespace PicMark
 
             if (maximized)
             {
+                WindowShell.Margin = new Thickness(6);
                 WindowShell.CornerRadius = new CornerRadius(0);
                 WindowShell.BorderThickness = new Thickness(0);
 
@@ -923,6 +993,7 @@ namespace PicMark
             }
             else
             {
+                WindowShell.Margin = new Thickness(0);
                 WindowShell.CornerRadius = new CornerRadius(8);
                 WindowShell.BorderThickness = new Thickness(1);
                 WindowShell.Padding = new Thickness(0);
@@ -1128,7 +1199,7 @@ namespace PicMark
         {
             Visibility editorVisibility = editMode ? Visibility.Visible : Visibility.Collapsed;
             if (BtnPrintTop != null) BtnPrintTop.Visibility = editorVisibility;
-            if (BtnCompressTop != null) BtnCompressTop.Visibility = editorVisibility;
+            if (BtnCompressTop != null) BtnCompressTop.Visibility = Visibility.Collapsed;
             if (BtnRotateTop != null) BtnRotateTop.Visibility = editorVisibility;
             if (BtnUndoTop != null) BtnUndoTop.Visibility = editorVisibility;
             if (BtnRedoTop != null) BtnRedoTop.Visibility = editorVisibility;
@@ -1142,10 +1213,14 @@ namespace PicMark
             Style bottomStyle = (Style)FindResource(editMode ? "BottomBarButton" : "ViewerBottomBarButton");
             Style navStyle = (Style)FindResource(editMode ? "ToolButton" : "ViewerNavButton");
             Brush normalForeground = editMode ? BrushFromRgb(0xF4, 0xF4, 0xF5) : BrushFromRgb(0x25, 0x31, 0x42);
+            Brush topButtonBackground = editMode ? BrushFromRgb(0x30, 0x30, 0x30) : BrushFromRgb(0xF7, 0xFA, 0xFB);
+            Brush topButtonBorder = editMode ? BrushFromRgb(0x4A, 0x4A, 0x4A) : BrushFromRgb(0xC8, 0xD6, 0xE2);
             Brush transparent = Brushes.Transparent;
 
-            foreach (var button in new[] { BtnOpen, BtnSave, BtnEditMode })
+            foreach (var button in new[] { BtnSave, BtnEditMode })
                 ApplyButtonStyle(button, primaryStyle);
+            bool hasImage = Canvas1.Image != null;
+            ApplyButtonStyle(BtnOpen, hasImage ? toolStyle : primaryStyle);
 
             foreach (var button in new[]
             {
@@ -1153,7 +1228,7 @@ namespace PicMark
             })
             {
                 ApplyButtonStyle(button, toolStyle);
-                ResetNeutralButton(button, normalForeground, transparent, transparent, new Thickness(0));
+                ResetNeutralButton(button, normalForeground, topButtonBackground, topButtonBorder, new Thickness(1));
             }
 
             foreach (var button in new[] { ViewerPrevButton, ViewerNextButton })
@@ -1162,7 +1237,7 @@ namespace PicMark
                 if (editMode)
                     ResetNeutralButton(button, normalForeground, transparent, transparent, new Thickness(0));
                 else
-                    ResetNeutralButton(button, Brushes.White, BrushFromArgb(0xD9, 0x26, 0x32, 0x41), BrushFromArgb(0x66, 0x3F, 0x4B, 0x5D), new Thickness(1));
+                    ResetNeutralButton(button, BrushFromRgb(0x40, 0x56, 0x6B), Brushes.Transparent, Brushes.Transparent, new Thickness(0));
             }
 
             foreach (var button in new[] { BottomZoomInBtn, BottomZoomOutBtn, BottomZoomFitBtn, BottomZoomResetBtn })
@@ -1182,10 +1257,15 @@ namespace PicMark
 
             if (BtnOpen != null)
             {
-                BtnOpen.Background = (Brush)FindResource("AccentBrush");
-                BtnOpen.Foreground = Brushes.White;
-                BtnOpen.BorderBrush = (Brush)FindResource("AccentBrush");
-                BtnOpen.BorderThickness = new Thickness(0);
+                if (hasImage)
+                    ResetNeutralButton(BtnOpen, normalForeground, topButtonBackground, topButtonBorder, new Thickness(1));
+                else
+                {
+                    BtnOpen.Background = (Brush)FindResource("AccentBrush");
+                    BtnOpen.Foreground = Brushes.White;
+                    BtnOpen.BorderBrush = (Brush)FindResource("AccentBrush");
+                    BtnOpen.BorderThickness = new Thickness(0);
+                }
             }
             if (BtnSave != null)
             {
@@ -1455,6 +1535,8 @@ namespace PicMark
                     WatermarkAngleSlider.Value = 0;
                     break;
             }
+            if (_watermarkStyle != WatermarkStyle.ImageLogo)
+                _watermarkColorUserSelected = false;
             _initializingWatermarkUi = false;
             UpdateWatermarkControls();
             ApplyWatermarkFromControls(resetSinglePosition);
@@ -1480,6 +1562,7 @@ namespace PicMark
         private void WatermarkColor_Click(object sender, RoutedEventArgs e)
         {
             if (!(sender is Button button)) return;
+            _watermarkColorUserSelected = true;
             switch (button.Tag as string)
             {
                 case "White": _watermarkColor = Colors.White; break;
@@ -1637,6 +1720,7 @@ namespace PicMark
         {
             if (_initializingWatermarkUi || !_hasSelectedWatermarkTemplate || Canvas1 == null || Canvas1.Image == null) return;
             var current = Canvas1.GetWatermark();
+            ApplyAdaptiveWatermarkColorIfNeeded(Canvas1.Image);
             Canvas1.SetWatermark(new WatermarkSettings
             {
                 Enabled = true,
@@ -1661,6 +1745,54 @@ namespace PicMark
                 _hasUnsavedChanges = true;
         }
 
+        private void ApplyAdaptiveWatermarkColorIfNeeded(BitmapSource image)
+        {
+            if (_watermarkColorUserSelected || _watermarkStyle == WatermarkStyle.ImageLogo || image == null) return;
+            _watermarkColor = EstimateImageLuminance(image) < 0.48 ? Colors.White : Colors.Black;
+        }
+
+        private static double EstimateImageLuminance(BitmapSource source)
+        {
+            try
+            {
+                const int sampleSize = 64;
+                double scale = Math.Min(1.0, sampleSize / Math.Max(1.0, Math.Max(source.PixelWidth, source.PixelHeight)));
+                BitmapSource sampled = scale < 1.0
+                    ? new TransformedBitmap(source, new ScaleTransform(scale, scale))
+                    : source;
+                BitmapSource bitmap = sampled.Format == PixelFormats.Bgra32 || sampled.Format == PixelFormats.Pbgra32
+                    ? sampled
+                    : new FormatConvertedBitmap(sampled, PixelFormats.Bgra32, null, 0);
+
+                int width = Math.Max(1, bitmap.PixelWidth);
+                int height = Math.Max(1, bitmap.PixelHeight);
+                int stride = width * 4;
+                var pixels = new byte[stride * height];
+                bitmap.CopyPixels(pixels, stride, 0);
+
+                double total = 0;
+                double weight = 0;
+                for (int i = 0; i < pixels.Length; i += 4)
+                {
+                    byte b = pixels[i];
+                    byte g = pixels[i + 1];
+                    byte r = pixels[i + 2];
+                    byte a = pixels[i + 3];
+                    if (a < 24) continue;
+
+                    double alpha = a / 255.0;
+                    total += ((0.2126 * r) + (0.7152 * g) + (0.0722 * b)) / 255.0 * alpha;
+                    weight += alpha;
+                }
+
+                return weight <= 0 ? 1.0 : total / weight;
+            }
+            catch
+            {
+                return 1.0;
+            }
+        }
+
         private void Canvas1_WatermarkChanged(object sender, EventArgs e)
         {
             if (_syncingWatermarkFromCanvas) return;
@@ -1673,6 +1805,8 @@ namespace PicMark
             _watermarkLogoPath = watermark.LogoPath ?? string.Empty;
             _watermarkLogoFlipHorizontal = watermark.LogoFlipHorizontal;
             _watermarkLogoFlipVertical = watermark.LogoFlipVertical;
+            _watermarkColor = watermark.Color;
+            _watermarkColorUserSelected = true;
             WatermarkLogoScaleSlider.Value = Math.Max(WatermarkLogoScaleSlider.Minimum,
                 Math.Min(WatermarkLogoScaleSlider.Maximum, watermark.LogoScalePercent <= 0 ? 18 : watermark.LogoScalePercent));
             WatermarkOffsetSlider.Value = Math.Max(WatermarkOffsetSlider.Minimum,
@@ -1872,32 +2006,19 @@ namespace PicMark
 
         private void BtnBatchCrop_Click(object sender, RoutedEventArgs e)
         {
-            var window = new BatchCropWindow(_currentFilePath) { Owner = this };
+            var window = new BatchCropWindow(GetCurrentDiskPath()) { Owner = this };
+            window.ShowDialog();
+        }
+
+        private void BtnCollage_Click(object sender, RoutedEventArgs e)
+        {
+            var window = new CollageWindow(GetCurrentDiskPath()) { Owner = this };
             window.ShowDialog();
         }
 
         public void OpenBatchCropForPath(string targetPath)
         {
-            string folder = null;
-            string currentImage = null;
-
-            if (!string.IsNullOrWhiteSpace(targetPath))
-            {
-                if (Directory.Exists(targetPath))
-                {
-                    folder = targetPath;
-                    currentImage = targetPath; // 传目录路径，供 BatchCropWindow 推导 _initialDirectory
-                }
-                else if (File.Exists(targetPath))
-                {
-                    currentImage = targetPath;
-                    try { folder = Path.GetDirectoryName(targetPath); } catch { }
-                }
-            }
-
-            var window = new BatchCropWindow(currentImage) { Owner = this };
-            if (!string.IsNullOrEmpty(folder) && Directory.Exists(folder))
-                window.AddFolderImages(folder);
+            var window = new BatchCropWindow(targetPath) { Owner = this };
             window.ShowDialog();
         }
 
@@ -2803,12 +2924,14 @@ namespace PicMark
         private void ImageStage_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
             bool hasImage = Canvas1.Image != null;
-            foreach (var item in new[] { CtxCopyImage, CtxSaveAs, CtxPrint, CtxRotate, CtxFlip, CtxCrop, CtxFormatConvert, CtxOpenLocation, CtxImageInfo })
+            foreach (var item in new[] { CtxCopyImage, CtxSaveAs, CtxPrint, CtxRotate, CtxFlip, CtxCrop, CtxFormatConvert, CtxOpenLocation, CtxOpenWith, CtxImageInfo })
             {
                 if (item != null) item.IsEnabled = hasImage;
             }
             if (CtxOpenLocation != null)
                 CtxOpenLocation.IsEnabled = hasImage && !string.IsNullOrWhiteSpace(GetCurrentDiskPath());
+            if (CtxOpenWith != null)
+                CtxOpenWith.IsEnabled = hasImage && !string.IsNullOrWhiteSpace(GetCurrentDiskPath());
             ApplyContextMenuTheme(_editMode);
             UpdateRecentContextActionUi();
         }
@@ -2827,6 +2950,479 @@ namespace PicMark
 
             Process.Start("explorer.exe", $"/select,\"{path}\"");
             RecordRecentContextAction("OpenLocation");
+        }
+
+        private void OptOpenWith_Click(object sender, RoutedEventArgs e)
+        {
+            string path = GetCurrentDiskPath();
+            if (!EnsureCanOpenWith(path)) return;
+
+            // 顶部选项里使用独立的下拉菜单；右键菜单则使用真正的二级菜单。
+            var menu = CreateOpenWithMenu(path);
+            menu.PlacementTarget = BtnOptions;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+            menu.HorizontalOffset = -152;
+            menu.VerticalOffset = 4;
+            menu.IsOpen = true;
+        }
+
+        private void CtxOpenWith_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            var menu = sender as MenuItem;
+            if (menu == null) return;
+
+            string path = GetCurrentDiskPath();
+            PopulateOpenWithMenu(menu, path);
+        }
+
+        private ContextMenu CreateOpenWithMenu(string path)
+        {
+            var menu = new ContextMenu
+            {
+                StaysOpen = false
+            };
+            PopulateOpenWithMenu(menu, path);
+            return menu;
+        }
+
+        private void PopulateOpenWithMenu(ItemsControl menu, string path)
+        {
+            menu.Items.Clear();
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                menu.Items.Add(new MenuItem { Header = "请先把图片保存为文件", IsEnabled = false });
+                return;
+            }
+
+            foreach (OpenWithApplication application in GetOpenWithApplications(path))
+            {
+                var item = new MenuItem
+                {
+                    Header = application.DisplayName,
+                    Tag = application,
+                    ToolTip = application.ExecutablePath
+                };
+                item.Click += OpenWithApplication_Click;
+                menu.Items.Add(item);
+            }
+
+            if (menu.Items.Count == 0)
+                menu.Items.Add(new MenuItem { Header = "没有找到已注册的图片应用", IsEnabled = false });
+
+            menu.Items.Add(new Separator());
+            var chooseOther = new MenuItem { Header = "选择其他应用..." };
+            chooseOther.Click += MenuOpenWith_Click;
+            menu.Items.Add(chooseOther);
+        }
+
+        private bool EnsureCanOpenWith(string path)
+        {
+            if (!string.IsNullOrWhiteSpace(path) && File.Exists(path)) return true;
+
+            AppDialog.Show(this, "当前图片尚未保存为磁盘文件，请先另存为后再用其他应用打开。", "提示");
+            return false;
+        }
+
+        private void OpenWithApplication_Click(object sender, RoutedEventArgs e)
+        {
+            var item = sender as MenuItem;
+            var application = item?.Tag as OpenWithApplication;
+            string path = GetCurrentDiskPath();
+            if (application == null || !EnsureCanOpenWith(path)) return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = application.ExecutablePath,
+                    Arguments = BuildOpenWithArguments(application.Arguments, path),
+                    UseShellExecute = true
+                });
+                RecordRecentContextAction("OpenWith");
+            }
+            catch
+            {
+                AppDialog.Show(this, "无法用“" + application.DisplayName + "”打开当前图片。", "提示");
+            }
+        }
+
+        private void MenuOpenWith_Click(object sender, RoutedEventArgs e)
+        {
+            if (OptionsPopup != null)
+                OptionsPopup.IsOpen = false;
+
+            string path = GetCurrentDiskPath();
+            if (!EnsureCanOpenWith(path)) return;
+
+            try
+            {
+                string openWithExe = Path.Combine(Environment.SystemDirectory, "OpenWith.exe");
+                if (File.Exists(openWithExe))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = openWithExe,
+                        Arguments = QuoteOpenWithArgument(path),
+                        UseShellExecute = true
+                    });
+                }
+                else
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = "rundll32.exe",
+                        Arguments = "shell32.dll,OpenAs_RunDLL \"" + path + "\"",
+                        UseShellExecute = true
+                    });
+                }
+                RecordRecentContextAction("OpenWith");
+            }
+            catch
+            {
+                AppDialog.Show(this, "无法打开系统的“选择其他应用”窗口。", "提示");
+            }
+        }
+
+        private static string BuildOpenWithArguments(string registeredArguments, string filePath)
+        {
+            string quotedPath = QuoteOpenWithArgument(filePath);
+            string arguments = registeredArguments ?? string.Empty;
+            bool hasFilePlaceholder = arguments.IndexOf("%1", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                      arguments.IndexOf("%l", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            // 注册表命令常写成 "%1"。先替换带引号的形式，避免出现双引号。
+            arguments = arguments.Replace("\"%1\"", quotedPath)
+                                 .Replace("\"%L\"", quotedPath)
+                                 .Replace("\"%l\"", quotedPath)
+                                 .Replace("%1", quotedPath)
+                                 .Replace("%L", quotedPath)
+                                 .Replace("%l", quotedPath);
+            return hasFilePlaceholder ? arguments.Trim() : (arguments + " " + quotedPath).Trim();
+        }
+
+        private static string QuoteOpenWithArgument(string value)
+        {
+            return "\"" + value.Replace("\"", "\\\"") + "\"";
+        }
+
+        private List<OpenWithApplication> GetOpenWithApplications(string filePath)
+        {
+            string extension = Path.GetExtension(filePath).ToLowerInvariant();
+            var applications = new List<OpenWithApplication>();
+            var seenExecutablePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var programIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var executableNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            CollectRegisteredProgramIds(extension, programIds);
+            CollectRegisteredOpenWithExecutables(extension, executableNames);
+
+            foreach (string programId in programIds)
+                AddApplicationForProgramId(applications, seenExecutablePaths, programId);
+            foreach (string executableName in executableNames)
+                AddApplicationForExecutableName(applications, seenExecutablePaths, executableName);
+
+            AddApplicationsSupportingExtension(applications, seenExecutablePaths, extension);
+            AddKnownImageApplicationsFromAppPaths(applications, seenExecutablePaths);
+
+            return applications
+                .OrderBy(application => GetOpenWithApplicationRank(application.DisplayName))
+                .ThenBy(application => application.DisplayName, StringComparer.CurrentCultureIgnoreCase)
+                .Take(14)
+                .ToList();
+        }
+
+        private static void CollectRegisteredProgramIds(string extension, ISet<string> programIds)
+        {
+            AddRegistryDefaultValue(Registry.ClassesRoot, extension, programIds);
+            AddRegistryValueNames(Registry.ClassesRoot, extension + "\\OpenWithProgids", programIds);
+            AddRegistryValueNames(Registry.ClassesRoot, "SystemFileAssociations\\" + extension + "\\OpenWithProgids", programIds);
+
+            try
+            {
+                using (RegistryKey userChoice = Registry.CurrentUser.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\" + extension + "\\UserChoice"))
+                {
+                    string programId = userChoice?.GetValue("ProgId") as string;
+                    if (!string.IsNullOrWhiteSpace(programId)) programIds.Add(programId);
+                }
+            }
+            catch
+            {
+                // 访问受策略限制时，仍可从 HKCR 的常规关联继续读取。
+            }
+        }
+
+        private static void CollectRegisteredOpenWithExecutables(string extension, ISet<string> executableNames)
+        {
+            AddOpenWithListEntries(Registry.ClassesRoot, extension + "\\OpenWithList", executableNames);
+            AddOpenWithListEntries(Registry.ClassesRoot, "SystemFileAssociations\\" + extension + "\\OpenWithList", executableNames);
+        }
+
+        private static void AddRegistryDefaultValue(RegistryKey root, string path, ISet<string> values)
+        {
+            try
+            {
+                using (RegistryKey key = root.OpenSubKey(path))
+                {
+                    string value = key?.GetValue(null) as string;
+                    if (!string.IsNullOrWhiteSpace(value)) values.Add(value);
+                }
+            }
+            catch { }
+        }
+
+        private static void AddRegistryValueNames(RegistryKey root, string path, ISet<string> values)
+        {
+            try
+            {
+                using (RegistryKey key = root.OpenSubKey(path))
+                {
+                    if (key == null) return;
+                    foreach (string name in key.GetValueNames())
+                    {
+                        if (!string.IsNullOrWhiteSpace(name)) values.Add(name);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void AddOpenWithListEntries(RegistryKey root, string path, ISet<string> executableNames)
+        {
+            try
+            {
+                using (RegistryKey key = root.OpenSubKey(path))
+                {
+                    if (key == null) return;
+                    foreach (string name in key.GetSubKeyNames())
+                    {
+                        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) executableNames.Add(name);
+                    }
+                    foreach (string valueName in key.GetValueNames())
+                    {
+                        string value = key.GetValue(valueName) as string;
+                        if (!string.IsNullOrWhiteSpace(value) && value.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                            executableNames.Add(value);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void AddApplicationForProgramId(List<OpenWithApplication> applications, ISet<string> seenExecutablePaths, string programId)
+        {
+            if (string.IsNullOrWhiteSpace(programId)) return;
+            try
+            {
+                using (RegistryKey key = Registry.ClassesRoot.OpenSubKey(programId))
+                {
+                    AddApplicationFromRegistryKey(applications, seenExecutablePaths, key, programId);
+                }
+            }
+            catch { }
+        }
+
+        private static void AddApplicationForExecutableName(List<OpenWithApplication> applications, ISet<string> seenExecutablePaths, string executableName)
+        {
+            if (string.IsNullOrWhiteSpace(executableName)) return;
+            try
+            {
+                using (RegistryKey key = Registry.ClassesRoot.OpenSubKey("Applications\\" + executableName))
+                {
+                    if (key != null)
+                    {
+                        AddApplicationFromRegistryKey(applications, seenExecutablePaths, key, Path.GetFileNameWithoutExtension(executableName));
+                        return;
+                    }
+                }
+            }
+            catch { }
+
+            string appPath = GetApplicationPath(executableName);
+            AddOpenWithApplication(applications, seenExecutablePaths, appPath, Path.GetFileNameWithoutExtension(executableName));
+        }
+
+        private static void AddApplicationFromRegistryKey(List<OpenWithApplication> applications, ISet<string> seenExecutablePaths, RegistryKey key, string fallbackName)
+        {
+            if (key == null) return;
+            try
+            {
+                string friendlyName = key.GetValue("FriendlyAppName") as string;
+                string command = GetOpenCommand(key);
+                AddOpenWithApplication(applications, seenExecutablePaths, command, friendlyName ?? fallbackName);
+            }
+            catch { }
+        }
+
+        private static string GetOpenCommand(RegistryKey key)
+        {
+            try
+            {
+                using (RegistryKey commandKey = key.OpenSubKey("shell\\open\\command"))
+                {
+                    return commandKey?.GetValue(null) as string;
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void AddApplicationsSupportingExtension(List<OpenWithApplication> applications, ISet<string> seenExecutablePaths, string extension)
+        {
+            try
+            {
+                using (RegistryKey applicationsKey = Registry.ClassesRoot.OpenSubKey("Applications"))
+                {
+                    if (applicationsKey == null) return;
+                    foreach (string executableName in applicationsKey.GetSubKeyNames())
+                    {
+                        using (RegistryKey applicationKey = applicationsKey.OpenSubKey(executableName))
+                        using (RegistryKey supportedTypes = applicationKey?.OpenSubKey("SupportedTypes"))
+                        {
+                            if (supportedTypes == null || !supportedTypes.GetValueNames().Any(name => string.Equals(name, extension, StringComparison.OrdinalIgnoreCase)))
+                                continue;
+                            AddApplicationFromRegistryKey(applications, seenExecutablePaths, applicationKey, Path.GetFileNameWithoutExtension(executableName));
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 第三方程序通常会走 OpenWithList / OpenWithProgids；扫描失败不影响这些来源。
+            }
+        }
+
+        private static void AddKnownImageApplicationsFromAppPaths(List<OpenWithApplication> applications, ISet<string> seenExecutablePaths)
+        {
+            AddKnownImageApplicationsFromAppPaths(applications, seenExecutablePaths, Registry.CurrentUser);
+            AddKnownImageApplicationsFromAppPaths(applications, seenExecutablePaths, Registry.LocalMachine);
+            try
+            {
+                using (RegistryKey localMachine32 = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
+                    AddKnownImageApplicationsFromAppPaths(applications, seenExecutablePaths, localMachine32);
+            }
+            catch { }
+        }
+
+        private static void AddKnownImageApplicationsFromAppPaths(List<OpenWithApplication> applications, ISet<string> seenExecutablePaths, RegistryKey root)
+        {
+            try
+            {
+                using (RegistryKey appPathsKey = root.OpenSubKey("Software\\Microsoft\\Windows\\CurrentVersion\\App Paths"))
+                {
+                    if (appPathsKey == null) return;
+                    foreach (string executableName in appPathsKey.GetSubKeyNames())
+                    {
+                        if (!IsLikelyImageApplication(executableName)) continue;
+                        using (RegistryKey appPathKey = appPathsKey.OpenSubKey(executableName))
+                        {
+                            string executablePath = appPathKey?.GetValue(null) as string;
+                            AddOpenWithApplication(applications, seenExecutablePaths, executablePath, Path.GetFileNameWithoutExtension(executableName));
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static string GetApplicationPath(string executableName)
+        {
+            string registryPath = "Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + executableName;
+            foreach (RegistryKey root in new[] { Registry.CurrentUser, Registry.LocalMachine })
+            {
+                try
+                {
+                    using (RegistryKey key = root.OpenSubKey(registryPath))
+                    {
+                        string path = key?.GetValue(null) as string;
+                        if (!string.IsNullOrWhiteSpace(path)) return path;
+                    }
+                }
+                catch { }
+            }
+            return null;
+        }
+
+        private static bool IsLikelyImageApplication(string executableName)
+        {
+            string name = executableName.ToLowerInvariant();
+            string[] imageApplicationNames =
+            {
+                "photoshop", "lightroom", "gimp", "krita", "paint", "affinity", "captureone",
+                "xnview", "irfanview", "faststone", "cspaint", "clipstudio", "medibang", "sai", "canva"
+            };
+            return imageApplicationNames.Any(name.Contains);
+        }
+
+        private static void AddOpenWithApplication(List<OpenWithApplication> applications, ISet<string> seenExecutablePaths, string command, string fallbackName)
+        {
+            string executablePath;
+            string arguments;
+            if (!TrySplitOpenCommand(command, out executablePath, out arguments)) return;
+            if (IsCurrentApplication(executablePath) || !seenExecutablePaths.Add(executablePath)) return;
+
+            applications.Add(new OpenWithApplication
+            {
+                DisplayName = GetOpenWithDisplayName(executablePath, fallbackName),
+                ExecutablePath = executablePath,
+                Arguments = arguments
+            });
+        }
+
+        private static bool TrySplitOpenCommand(string command, out string executablePath, out string arguments)
+        {
+            executablePath = null;
+            arguments = string.Empty;
+            if (string.IsNullOrWhiteSpace(command)) return false;
+
+            string expandedCommand = Environment.ExpandEnvironmentVariables(command.Trim());
+            if (expandedCommand.StartsWith("\"", StringComparison.Ordinal))
+            {
+                int endQuote = expandedCommand.IndexOf('"', 1);
+                if (endQuote <= 1) return false;
+                executablePath = expandedCommand.Substring(1, endQuote - 1);
+                arguments = expandedCommand.Substring(endQuote + 1).Trim();
+            }
+            else
+            {
+                int executableEnd = expandedCommand.IndexOf(".exe", StringComparison.OrdinalIgnoreCase);
+                if (executableEnd < 0) return false;
+                executablePath = expandedCommand.Substring(0, executableEnd + 4).Trim();
+                arguments = expandedCommand.Substring(executableEnd + 4).Trim();
+            }
+
+            executablePath = executablePath.Trim().Trim('"');
+            return File.Exists(executablePath);
+        }
+
+        private static bool IsCurrentApplication(string executablePath)
+        {
+            try
+            {
+                return string.Equals(executablePath, Assembly.GetEntryAssembly().Location, StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string GetOpenWithDisplayName(string executablePath, string fallbackName)
+        {
+            try
+            {
+                FileVersionInfo version = FileVersionInfo.GetVersionInfo(executablePath);
+                if (!string.IsNullOrWhiteSpace(version.ProductName)) return version.ProductName;
+                if (!string.IsNullOrWhiteSpace(version.FileDescription)) return version.FileDescription;
+            }
+            catch { }
+            return !string.IsNullOrWhiteSpace(fallbackName) ? fallbackName : Path.GetFileNameWithoutExtension(executablePath);
+        }
+
+        private static int GetOpenWithApplicationRank(string displayName)
+        {
+            return IsLikelyImageApplication(displayName) ? 0 : 1;
         }
 
         private void MenuImageInfo_Click(object sender, RoutedEventArgs e)
@@ -2857,7 +3453,8 @@ namespace PicMark
 
         private void MenuFormatConvert_Click(object sender, RoutedEventArgs e)
         {
-            OptionsPopup.IsOpen = false;
+            if (OptionsPopup != null)
+                OptionsPopup.IsOpen = false;
             string currentPath = GetCurrentDiskPath();
             bool hasConvertibleDiskFile = !string.IsNullOrWhiteSpace(currentPath)
                 && File.Exists(currentPath)
@@ -2921,6 +3518,9 @@ namespace PicMark
                 case "OpenLocation":
                     MenuOpenContainingFolder_Click(this, null);
                     break;
+                case "OpenWith":
+                    MenuOpenWith_Click(this, null);
+                    break;
                 case "ImageInfo":
                     MenuImageInfo_Click(this, null);
                     break;
@@ -2960,7 +3560,7 @@ namespace PicMark
         private bool IsRecentContextActionAvailable(string actionId)
         {
             if (string.IsNullOrWhiteSpace(actionId)) return false;
-            if (actionId == "OpenLocation")
+            if (actionId == "OpenLocation" || actionId == "OpenWith")
                 return !string.IsNullOrWhiteSpace(GetCurrentDiskPath());
             return GetRecentContextActionLabel(actionId) != null;
         }
@@ -2979,10 +3579,12 @@ namespace PicMark
                     return "裁剪图片";
                 case "OpenLocation":
                     return "打开所在位置";
+                case "OpenWith":
+                    return "用其他应用打开";
                 case "ImageInfo":
                     return "图片信息";
                 case "FormatConvert":
-                    return "格式转换";
+                    return "另存为其他格式";
                 case "RotateLeft90":
                     return "向左旋转 90°";
                 case "RotateRight90":
@@ -3306,6 +3908,8 @@ namespace PicMark
                 OptImageInfo.IsEnabled = hasImage;
             if (OptOpenLocation != null)
                 OptOpenLocation.IsEnabled = hasDiskFile;
+            if (OptOpenWith != null)
+                OptOpenWith.IsEnabled = hasDiskFile;
         }
 
         private void MenuOpenNewImage_Click(object sender, RoutedEventArgs e)
@@ -3318,6 +3922,79 @@ namespace PicMark
         {
             OptionsPopup.IsOpen = false;
             ShowShortcutsDialog();
+        }
+
+        private void MenuDefaultAppsHelp_Click(object sender, RoutedEventArgs e)
+        {
+            OptionsPopup.IsOpen = false;
+            var result = AppDialog.Show(this,
+                "Windows 10 不允许应用静默修改默认图片打开方式。\n\n我可以帮你打开系统“默认应用”设置：在“照片查看器/按文件类型选择默认应用”里，把 jpg、png、bmp、webp 选择为 PicMark。",
+                "设为默认打开方式",
+                MessageBoxButton.OKCancel);
+            if (result != MessageBoxResult.OK) return;
+
+            try
+            {
+                Process.Start(new ProcessStartInfo("ms-settings:defaultapps") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                AppDialog.Show(this, $"无法打开系统默认应用设置：{ex.Message}", "提示");
+            }
+        }
+
+        private void MenuReportIssue_Click(object sender, RoutedEventArgs e)
+        {
+            OptionsPopup.IsOpen = false;
+            string report = BuildIssueReportTemplate();
+            bool copied = TrySetClipboardText(report);
+            AppDialog.Show(this,
+                copied
+                    ? "已把错误汇报模板复制到剪贴板。\n\n你可以直接粘贴给开发者，最好再附上一张截图和触发步骤。"
+                    : "已生成错误汇报模板，但复制到剪贴板失败。\n\n请重试，或手动描述：截图、触发步骤、当前文件名、系统版本。",
+                "汇报错误");
+        }
+
+        private string BuildIssueReportTemplate()
+        {
+            string appVersion = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
+            string file = !string.IsNullOrWhiteSpace(_currentFilePath) ? Path.GetFileName(_currentFilePath) : "未打开图片";
+            string image = Canvas1?.Image == null
+                ? "无"
+                : $"{Canvas1.Image.PixelWidth}x{Canvas1.Image.PixelHeight}, 缩放 {Canvas1.Scale:P0}";
+            return
+                "PicMark 错误汇报\n" +
+                $"时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}\n" +
+                $"版本：{appVersion}\n" +
+                $"系统：{Environment.OSVersion.VersionString}\n" +
+                $"当前文件：{file}\n" +
+                $"图片信息：{image}\n\n" +
+                "问题现象：\n" +
+                "- \n\n" +
+                "复现步骤：\n" +
+                "1. \n" +
+                "2. \n" +
+                "3. \n\n" +
+                "期望结果：\n" +
+                "- \n\n" +
+                "附件：请附截图/问题图片（如方便）。";
+        }
+
+        private static bool TrySetClipboardText(string text)
+        {
+            try
+            {
+                Clipboard.SetText(text ?? string.Empty);
+                return true;
+            }
+            catch (COMException)
+            {
+                return false;
+            }
+            catch (ExternalException)
+            {
+                return false;
+            }
         }
 
         private void MenuHistoryCache_Click(object sender, RoutedEventArgs e)
@@ -4143,6 +4820,7 @@ namespace PicMark
             {
                 TitleFileInfoText.Text = "见微 PicMark";
                 TitleFileInfoText.ToolTip = "见微 PicMark";
+                Title = "见微 PicMark";
                 return;
             }
 
@@ -4163,6 +4841,7 @@ namespace PicMark
 
             TitleFileInfoText.Text = title;
             TitleFileInfoText.ToolTip = title;
+            Title = title;
         }
 
         private void UpdateBottomOverlayConstraints()
@@ -4174,25 +4853,46 @@ namespace PicMark
             double zoomWidth = BottomZoomBar.ActualWidth;
             if (overlayWidth <= 0 || zoomWidth <= 0) return;
 
-            double sideWidth = Math.Max(0, (overlayWidth - zoomWidth) / 2.0 - 16);
+            const double centerOuterMargin = 24; // BottomZoomBar has 12px margin on both sides.
+            const double sideSafetyGap = 18;
+            double sideWidth = Math.Max(0, (overlayWidth - zoomWidth - centerOuterMargin) / 2.0 - sideSafetyGap);
             if (RightBottomBadges != null)
+            {
                 RightBottomBadges.MaxWidth = sideWidth;
+                RightBottomBadges.Margin = sideWidth > 0 ? new Thickness(12, 0, 0, 0) : new Thickness(0);
+            }
 
-            if (sideWidth < 220)
+            if (StatusBadge != null)
+            {
+                StatusBadge.MaxWidth = Math.Max(86, sideWidth);
+                StatusText.MaxWidth = Math.Max(58, sideWidth - 20);
+            }
+
+            if (Canvas1.Image == null || sideWidth < 190)
             {
                 CurrentFileBadge.Visibility = Visibility.Collapsed;
-                ImageInfoBadge.MaxWidth = Math.Max(120, sideWidth);
-                ImageInfoText.MaxWidth = Math.Max(92, sideWidth - 18);
+                ImageInfoBadge.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            CurrentFileBadge.Visibility = Canvas1.Image == null ? Visibility.Collapsed : Visibility.Visible;
-            double infoBadgeWidth = Math.Min(230, Math.Max(142, sideWidth * 0.54));
-            double fileBadgeWidth = Math.Min(240, Math.Max(86, sideWidth - infoBadgeWidth - 8));
+            ImageInfoBadge.Visibility = Visibility.Visible;
+            bool showFileBadge = sideWidth >= 430;
+            CurrentFileBadge.Visibility = showFileBadge ? Visibility.Visible : Visibility.Collapsed;
+
+            double infoBadgeWidth = showFileBadge
+                ? Math.Min(210, Math.Max(148, sideWidth * 0.48))
+                : Math.Min(250, Math.Max(132, sideWidth - 12));
+            double fileBadgeWidth = showFileBadge
+                ? Math.Min(230, Math.Max(104, sideWidth - infoBadgeWidth - 20))
+                : 0;
 
             ImageInfoBadge.MaxWidth = infoBadgeWidth;
             ImageInfoText.MaxWidth = Math.Max(90, infoBadgeWidth - 18);
-            CurrentFileBadge.MaxWidth = fileBadgeWidth;
+            if (showFileBadge)
+            {
+                CurrentFileBadge.MaxWidth = fileBadgeWidth;
+                CurrentFileText.MaxWidth = Math.Max(62, fileBadgeWidth - 20);
+            }
         }
 
         private void AddRecentFile(string path)

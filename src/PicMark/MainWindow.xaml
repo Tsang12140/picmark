@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:PicMark"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="见微 PicMark" Height="840" Width="1280"
+        Title="见微 PicMark" Height="720" Width="1080"
         MinWidth="980" MinHeight="640"
         Icon="App.ico"
         WindowStyle="None"
@@ -437,12 +437,12 @@
         </Style>
 
         <Style x:Key="ViewerNavButton" TargetType="Button">
-            <Setter Property="Background" Value="#D9263241"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="BorderBrush" Value="#663F4B5D"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="MinWidth" Value="54"/>
-            <Setter Property="Height" Value="78"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#FF40566B"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="MinWidth" Value="44"/>
+            <Setter Property="Height" Value="64"/>
             <Setter Property="Padding" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -456,14 +456,15 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#EE1F2A36"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#CCFFFFFF"/>
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#668AA1B5"/>
+                                <Setter TargetName="Bd" Property="BorderThickness" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="#FF17212C"/>
+                                <Setter TargetName="Bd" Property="Background" Value="#FFE2ECF3"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="Bd" Property="Background" Value="#66303A46"/>
-                                <Setter Property="Foreground" Value="#99FFFFFF"/>
+                                <Setter Property="Foreground" Value="#8040566B"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -756,16 +757,16 @@
 
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="BtnOpen" Style="{StaticResource PrimaryButton}" Height="30" Click="BtnOpen_Click" ToolTip="打开图片 (Ctrl+O)">
-                        <TextBlock Text="打开"/>
+                        <TextBlock Text="打开" FontWeight="Bold"/>
                     </Button>
                     <Button x:Name="BtnPrintTop" Style="{StaticResource ToolButton}" Height="30" Click="BtnPrint_Click" ToolTip="打印当前图片 (Ctrl+P)">
-                        <TextBlock Text="打印"/>
+                        <TextBlock Text="打印" FontWeight="Bold"/>
                     </Button>
-                    <Button x:Name="BtnCompressTop" Style="{StaticResource ToolButton}" Height="30" Click="MenuSaveAs_Click" ToolTip="压缩/另存为 (Ctrl+Shift+S)">
-                        <TextBlock Text="压缩"/>
+                    <Button x:Name="BtnCompressTop" Style="{StaticResource ToolButton}" Height="30" Visibility="Collapsed" Click="MenuSaveAs_Click" ToolTip="另存为 (Ctrl+Shift+S)">
+                        <TextBlock Text="另存" FontWeight="Bold"/>
                     </Button>
                     <Button x:Name="BtnRotateTop" Style="{StaticResource ToolButton}" Height="30" Click="BtnRotateMenu_Click" ToolTip="旋转 / 翻转">
-                        <TextBlock Text="旋转"/>
+                        <TextBlock Text="旋转" FontWeight="Bold"/>
                     </Button>
                     <Popup x:Name="RotatePopup" PlacementTarget="{Binding ElementName=BtnRotateTop}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
                         <Border x:Name="RotatePopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="6" Width="158">
@@ -780,14 +781,14 @@
                         </Border>
                     </Popup>
                     <Button x:Name="BtnUndoTop" Style="{StaticResource ToolButton}" Height="30" Click="BtnUndo_Click" ToolTip="撤销 (Ctrl+Z)">
-                        <TextBlock Text="撤销"/>
+                        <TextBlock Text="撤销" FontWeight="Bold"/>
                     </Button>
                     <Button x:Name="BtnRedoTop" Style="{StaticResource ToolButton}" Height="30" Click="BtnRedo_Click" ToolTip="重做 (Ctrl+Shift+Z)">
-                        <TextBlock Text="重做"/>
+                        <TextBlock Text="重做" FontWeight="Bold"/>
                     </Button>
                     <Button x:Name="BtnSave" Style="{StaticResource PrimaryButton}" Height="30" MinWidth="78" Click="BtnSaveMenu_Click" ToolTip="保存 (Ctrl+S)">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="保存"/>
+                            <TextBlock Text="保存" FontWeight="Bold"/>
                             <Path Width="9" Height="6" Margin="8,2,0,0" Stretch="Uniform" Fill="White" Data="M 0 0 L 5 5 L 10 0 Z"/>
                         </StackPanel>
                     </Button>
@@ -832,9 +833,12 @@
                                 <Button x:Name="OptOpenLocation" Style="{StaticResource SaveMenuButton}" Click="MenuOpenContainingFolder_Click">
                                     <TextBlock Text="打开所在位置"/>
                                 </Button>
+                                <Button x:Name="OptOpenWith" Style="{StaticResource SaveMenuButton}" Click="OptOpenWith_Click" ToolTip="显示可打开当前图片的已安装应用">
+                                    <TextBlock Text="用其他应用打开..."/>
+                                </Button>
                                 <Border Height="1" Background="#334A4A4A" Margin="8,5"/>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuFormatConvert_Click">
-                                    <TextBlock Text="格式转换..."/>
+                                    <TextBlock Text="另存为其他格式..."/>
                                 </Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuHistoryCache_Click">
                                     <TextBlock Text="历史缓存"/>
@@ -847,6 +851,12 @@
                                 </Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuShortcutsHelp_Click">
                                     <TextBlock Text="快捷键"/>
+                                </Button>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuDefaultAppsHelp_Click">
+                                    <TextBlock Text="设为默认打开方式"/>
+                                </Button>
+                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuReportIssue_Click">
+                                    <TextBlock Text="汇报错误"/>
                                 </Button>
                                 <Border Height="1" Background="#334A4A4A" Margin="8,5"/>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuAbout_Click">
@@ -1085,10 +1095,13 @@
                             <MenuItem Header="垂直翻转" Tag="FlipVertical" Click="ImageTransform_Click"/>
                         </MenuItem>
                         <MenuItem x:Name="CtxCrop" Header="裁剪图片..." Click="ContextCrop_Click"/>
-                        <MenuItem x:Name="CtxFormatConvert" Header="格式转换..." Click="MenuFormatConvert_Click"/>
+                        <MenuItem x:Name="CtxFormatConvert" Header="另存为其他格式..." Click="MenuFormatConvert_Click"/>
                         <Separator/>
                         <MenuItem Header="打开新图片..." InputGestureText="Ctrl+O" Click="BtnOpen_Click"/>
                         <MenuItem x:Name="CtxOpenLocation" Header="打开所在位置" Click="MenuOpenContainingFolder_Click"/>
+                        <MenuItem x:Name="CtxOpenWith" Header="用其他应用打开..." SubmenuOpened="CtxOpenWith_SubmenuOpened">
+                            <MenuItem Header="正在读取已安装应用..." IsEnabled="False"/>
+                        </MenuItem>
                         <Separator/>
                         <MenuItem x:Name="CtxImageInfo" Header="图片信息" InputGestureText="I" Click="MenuImageInfo_Click"/>
                         <Separator x:Name="CtxRecentSeparator"/>
@@ -1153,16 +1166,20 @@
                     </Border>
                 </ScrollViewer>
 
-                <Button x:Name="ViewerPrevButton" Width="58" Height="86" HorizontalAlignment="Left" VerticalAlignment="Center"
-                        Margin="26,0,0,0" Panel.ZIndex="4" Visibility="Collapsed" Opacity="0"
-                        Style="{StaticResource ToolButton}" Click="ViewerPrevButton_Click" ToolTip="上一张">
-                    <TextBlock Text="‹" FontSize="54" FontWeight="Normal" Margin="0,-8,0,0"/>
+                <Button x:Name="ViewerPrevButton" Width="44" Height="64" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Margin="18,0,0,0" Panel.ZIndex="4" Visibility="Collapsed" Opacity="1"
+                        Style="{StaticResource ViewerNavButton}" Click="ViewerPrevButton_Click" ToolTip="上一张">
+                    <Viewbox Width="15" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Path Data="M 17,3 L 6,14 L 17,25" Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                    </Viewbox>
                 </Button>
 
-                <Button x:Name="ViewerNextButton" Width="58" Height="86" HorizontalAlignment="Right" VerticalAlignment="Center"
-                        Margin="0,0,26,0" Panel.ZIndex="4" Visibility="Collapsed" Opacity="0"
-                        Style="{StaticResource ToolButton}" Click="ViewerNextButton_Click" ToolTip="下一张">
-                    <TextBlock Text="›" FontSize="54" FontWeight="Normal" Margin="0,-8,0,0"/>
+                <Button x:Name="ViewerNextButton" Width="44" Height="64" HorizontalAlignment="Right" VerticalAlignment="Center"
+                        Margin="0,0,18,0" Panel.ZIndex="4" Visibility="Collapsed" Opacity="1"
+                        Style="{StaticResource ViewerNavButton}" Click="ViewerNextButton_Click" ToolTip="下一张">
+                    <Viewbox Width="15" Height="28" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Path Data="M 5,3 L 16,14 L 5,25" Stroke="{Binding RelativeSource={RelativeSource AncestorType=Button}, Path=Foreground}" StrokeThickness="3" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                    </Viewbox>
                 </Button>
 
                 <Border x:Name="EmptyState" Width="520" Height="360" HorizontalAlignment="Center" VerticalAlignment="Center"
@@ -1195,7 +1212,7 @@
                                    ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
                     </Border>
 
-                    <Border x:Name="BottomZoomBar" Grid.Column="1" Padding="6,5"
+                    <Border x:Name="BottomZoomBar" Grid.Column="1" Padding="6,5" Margin="12,0"
                             Background="#F6F7FAFB" BorderBrush="#FFB9CBD8" BorderThickness="1" CornerRadius="10">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                             <Button x:Name="BottomPanBtn" Style="{StaticResource BottomBarButton}" Tag="Pan" Click="BtnPanCanvas_Click" ToolTip="抓手：点亮后按住图片拖动，放大后更明显">
@@ -1228,7 +1245,8 @@
                         </StackPanel>
                     </Border>
 
-                    <StackPanel x:Name="RightBottomBadges" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" ClipToBounds="True">
+                    <StackPanel x:Name="RightBottomBadges" Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" ClipToBounds="True"
+                                Margin="12,0,0,0">
                         <Border x:Name="ImageInfoBadge" Visibility="Collapsed" Height="34" Padding="8,0" Margin="0,0,6,0"
                                 Background="#F6F7FAFB" BorderBrush="#FFB9CBD8" BorderThickness="1" CornerRadius="10">
                             <TextBlock x:Name="ImageInfoText"
@@ -1343,6 +1361,16 @@
                                         </Canvas>
                                     </Viewbox>
                                     <TextBlock Style="{StaticResource PanelToolLabel}" Text="裁剪"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="PanelBtnCollage" Style="{StaticResource PanelToolButton}" Click="BtnCollage_Click" ToolTip="拼图">
+                                <StackPanel>
+                                    <Viewbox Width="24" Height="24">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Style="{StaticResource PanelToolIcon}" Data="M 4 4 L 11 4 L 11 11 L 4 11 Z M 13 4 L 20 4 L 20 11 L 13 11 Z M 4 13 L 11 13 L 11 20 L 4 20 Z M 13 13 L 20 13 L 20 20 L 13 20 Z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Style="{StaticResource PanelToolLabel}" Text="拼图"/>
                                 </StackPanel>
                             </Button>
                         </UniformGrid>

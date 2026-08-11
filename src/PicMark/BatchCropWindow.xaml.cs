@@ -24,6 +24,7 @@ namespace PicMark
         private readonly List<BatchCropPreset> _presets;
         private readonly List<string> _filePaths = new List<string>();
         private readonly Dictionary<string, BitmapSource> _imageCache = new Dictionary<string, BitmapSource>();
+        private readonly List<string> _lastOutputDirectories = new List<string>();
 
         private BitmapSource _sampleImage;
         private double _marginTopPct, _marginBottomPct, _marginLeftPct, _marginRightPct;
@@ -33,13 +34,19 @@ namespace PicMark
 
         public BatchCropWindow() : this(null) { }
 
-        public BatchCropWindow(string currentImagePath)
+        public BatchCropWindow(string initialPath)
         {
             InitializeComponent();
             _presets = BatchCropPresetStore.Load();
-            _initialDirectory = ResolveInitialDirectory(currentImagePath);
+            _initialDirectory = ResolveInitialDirectory(initialPath);
             RefreshPresetCombo();
+            string initialSample = AddInitialPath(initialPath);
             RefreshFileList();
+            if (!string.IsNullOrWhiteSpace(initialSample))
+            {
+                FileListBox.SelectedItem = initialSample;
+                SetSample(initialSample);
+            }
 
             // 小屏适配：clamp 到工作区
             var work = SystemParameters.WorkArea;
@@ -133,8 +140,7 @@ namespace PicMark
                 dlg.InitialDirectory = _initialDirectory;
             if (dlg.ShowDialog(this) != true) return;
             bool hadFiles = _filePaths.Count > 0;
-            foreach (var path in dlg.FileNames)
-                if (!_filePaths.Contains(path)) _filePaths.Add(path);
+            AddFiles(dlg.FileNames);
             RefreshFileList();
             if (!hadFiles && _filePaths.Count > 0) SetSample(_filePaths[0]);
         }
@@ -152,14 +158,54 @@ namespace PicMark
 
         public void AddFolderImages(string folder)
         {
-            if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return;
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return;
             bool hadFiles = _filePaths.Count > 0;
-            var found = Directory.EnumerateFiles(folder)
-                .Where(p => Array.IndexOf(SupportedExtensions, Path.GetExtension(p).ToLowerInvariant()) >= 0);
-            foreach (var path in found)
-                if (!_filePaths.Contains(path)) _filePaths.Add(path);
+            AddFolder(folder);
             RefreshFileList();
             if (!hadFiles && _filePaths.Count > 0) SetSample(_filePaths[0]);
+        }
+
+        private string AddInitialPath(string initialPath)
+        {
+            if (string.IsNullOrWhiteSpace(initialPath)) return null;
+            if (File.Exists(initialPath))
+            {
+                string dir = Path.GetDirectoryName(initialPath);
+                if (!string.IsNullOrWhiteSpace(dir))
+                    AddFolder(dir);
+                if (_filePaths.Count > 0)
+                    return _filePaths.FirstOrDefault(path => string.Equals(path, initialPath, StringComparison.OrdinalIgnoreCase)) ?? _filePaths[0];
+            }
+            else if (Directory.Exists(initialPath))
+            {
+                AddFolder(initialPath);
+                if (_filePaths.Count > 0) return _filePaths[0];
+            }
+            return null;
+        }
+
+        private void AddFolder(string folder)
+        {
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder)) return;
+            AddFiles(Directory.EnumerateFiles(folder)
+                .Where(IsSupportedImagePath));
+        }
+
+        private void AddFiles(IEnumerable<string> paths)
+        {
+            foreach (var path in paths ?? Enumerable.Empty<string>())
+            {
+                if (!IsSupportedImagePath(path)) continue;
+                if (!_filePaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+                    _filePaths.Add(path);
+            }
+        }
+
+        private static bool IsSupportedImagePath(string path)
+        {
+            return !string.IsNullOrWhiteSpace(path)
+                && File.Exists(path)
+                && Array.IndexOf(SupportedExtensions, Path.GetExtension(path).ToLowerInvariant()) >= 0;
         }
 
         private void RemoveSelected_Click(object sender, RoutedEventArgs e)
@@ -410,8 +456,10 @@ namespace PicMark
             }
 
             RunButton.IsEnabled = false;
+            OpenResultFolderButton.Visibility = Visibility.Collapsed;
             RunProgress.Maximum = _filePaths.Count;
             RunProgress.Value = 0;
+            _lastOutputDirectories.Clear();
 
             int succeeded = 0;
             var failed = new List<string>();
@@ -434,11 +482,14 @@ namespace PicMark
 
             RunButton.IsEnabled = true;
             StatusText.Text = "完成";
+            OpenResultFolderButton.Visibility = succeeded > 0 ? Visibility.Visible : Visibility.Collapsed;
 
             var summary = $"批量裁切完成：成功 {succeeded} 个，失败 {failed.Count} 个。结果保存在各文件所在目录的「已裁剪」子文件夹中。";
             if (failed.Count > 0)
                 summary += "\n\n失败文件：\n" + string.Join("\n", failed.Take(20)) + (failed.Count > 20 ? $"\n还有 {failed.Count - 20} 个" : "");
-            AppDialog.Show(this, summary, "批量裁切结果");
+            bool openResultFolder = succeeded > 0 && AppDialog.ShowWithPrimaryAction(this, summary, "批量裁切结果", "打开成品文件夹");
+            if (openResultFolder && TryOpenResultFolder())
+                Close();
         }
 
         private bool CropOneFile(string path, double top, double bottom, double left, double right)
@@ -461,6 +512,11 @@ namespace PicMark
             string dir = Path.GetDirectoryName(path);
             string outDir = Path.Combine(dir ?? ".", "已裁剪");
             Directory.CreateDirectory(outDir);
+            lock (_lastOutputDirectories)
+            {
+                if (!_lastOutputDirectories.Contains(outDir, StringComparer.OrdinalIgnoreCase))
+                    _lastOutputDirectories.Add(outDir);
+            }
             string ext = Path.GetExtension(path).ToLowerInvariant();
             string outExt = ext == ".webp" ? ".png" : ext;
             string outPath = Path.Combine(outDir, Path.GetFileNameWithoutExtension(path) + outExt);
@@ -468,6 +524,48 @@ namespace PicMark
             byte[] bytes = MainWindow.EncodeBitmap(cropped, outExt, 95);
             File.WriteAllBytes(outPath, bytes);
             return true;
+        }
+
+        private void OpenResultFolder_Click(object sender, RoutedEventArgs e)
+        {
+            TryOpenResultFolder();
+        }
+
+        private bool TryOpenResultFolder()
+        {
+            string currentDir = null;
+            if (FileListBox.Tag is string currentPath)
+            {
+                string currentSourceDir = Path.GetDirectoryName(currentPath);
+                if (!string.IsNullOrWhiteSpace(currentSourceDir))
+                    currentDir = Path.Combine(currentSourceDir, "已裁剪");
+            }
+            string target = !string.IsNullOrWhiteSpace(currentDir) && Directory.Exists(currentDir)
+                ? currentDir
+                : _lastOutputDirectories.FirstOrDefault(Directory.Exists);
+            if (string.IsNullOrWhiteSpace(target)) return false;
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(target) { UseShellExecute = true });
+            return true;
+        }
+
+        private void Window_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private void Window_Drop(object sender, DragEventArgs e)
+        {
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            bool hadFiles = _filePaths.Count > 0;
+            foreach (string path in (string[])e.Data.GetData(DataFormats.FileDrop))
+            {
+                if (Directory.Exists(path)) AddFolder(path);
+                else AddFiles(new[] { path });
+            }
+            RefreshFileList();
+            if (!hadFiles && _filePaths.Count > 0) SetSample(_filePaths[0]);
         }
 
     }

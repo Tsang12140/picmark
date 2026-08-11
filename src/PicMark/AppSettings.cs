@@ -16,9 +16,10 @@ namespace PicMark
 
         public double WindowLeft { get; set; } = double.NaN;
         public double WindowTop { get; set; } = double.NaN;
-        public double WindowWidth { get; set; } = 1280;
-        public double WindowHeight { get; set; } = 840;
+        public double WindowWidth { get; set; } = 1080;
+        public double WindowHeight { get; set; } = 720;
         public WindowState WindowState { get; set; } = WindowState.Normal;
+        public bool WindowLayoutInitialized { get; set; }
         public string Tool { get; set; } = "Select";
         public string Color { get; set; } = "Red";
         public string Thickness { get; set; } = "9";
@@ -74,6 +75,7 @@ namespace PicMark
                 "WindowWidth=" + FormatDouble(WindowWidth),
                 "WindowHeight=" + FormatDouble(WindowHeight),
                 "WindowState=" + WindowState,
+                "WindowLayoutInitialized=" + WindowLayoutInitialized,
                 "Tool=" + Tool,
                 "Color=" + Color,
                 "Thickness=" + Thickness,
@@ -111,6 +113,7 @@ namespace PicMark
                 case "WindowState":
                     if (Enum.TryParse(value, out WindowState state)) WindowState = state;
                     break;
+                case "WindowLayoutInitialized": WindowLayoutInitialized = ParseBool(value, WindowLayoutInitialized); break;
                 case "Tool": Tool = value; break;
                 case "Color": Color = value; break;
                 case "Thickness": Thickness = value; break;

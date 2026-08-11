@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 using WinForms = System.Windows.Forms;
@@ -52,7 +53,7 @@ namespace PicMark
             string initialName,
             string initialExtension)
         {
-            Title = "图片格式转换";
+            Title = "另存为其他格式";
             Width = 900;
             Height = 610;
             MinWidth = 820;
@@ -66,6 +67,8 @@ namespace PicMark
             AllowDrop = true;
             DragOver += Window_DragOver;
             Drop += Window_Drop;
+            Opacity = 0;
+            Loaded += (s, e) => BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(120)));
 
             // 小屏适配：clamp 到工作区
             var work = SystemParameters.WorkArea;
@@ -158,7 +161,7 @@ namespace PicMark
             var titleStack = new StackPanel();
             titleStack.Children.Add(new TextBlock
             {
-                Text = "图片格式转换",
+                Text = "另存为其他格式",
                 FontSize = 24,
                 FontWeight = FontWeights.Bold,
                 Foreground = Brushes.White
@@ -300,7 +303,7 @@ namespace PicMark
             _statusText.TextWrapping = TextWrapping.Wrap;
             footer.Children.Add(_statusText);
 
-            _convertButton.Content = "开始转换";
+            _convertButton.Content = "开始另存";
             CopyButtonLook(_convertButton, true);
             _convertButton.MinWidth = 110;
             _convertButton.Click += ConvertButton_Click;
@@ -407,7 +410,7 @@ namespace PicMark
             if (_running) return;
             if (!HasSource())
             {
-                AppDialog.Show(this, "请先选择要转换的图片。", "提示");
+                AppDialog.Show(this, "请先选择要另存的图片。", "提示");
                 return;
             }
 
@@ -440,13 +443,13 @@ namespace PicMark
                 string sizeText = result.SourceBytes > 0
                     ? $"{FormatBytes(result.SourceBytes)} → {FormatBytes(result.TargetBytes)}"
                     : FormatBytes(result.TargetBytes);
-                _statusText.Text = $"转换完成：{Path.GetFileName(result.TargetPath)}，{sizeText}";
+                _statusText.Text = $"另存完成：{Path.GetFileName(result.TargetPath)}，{sizeText}";
             }
             else
             {
                 _lastOutputFile = null;
                 _resultActions.Visibility = Visibility.Collapsed;
-                _statusText.Text = $"转换失败：{result.Message}";
+                _statusText.Text = $"另存失败：{result.Message}";
             }
         }
 
@@ -504,7 +507,7 @@ namespace PicMark
             try
             {
                 if (_sourceBitmap == null)
-                    throw new InvalidOperationException("没有可转换的图片。");
+                    throw new InvalidOperationException("没有可另存的图片。");
 
                 Directory.CreateDirectory(outputDirectory);
                 string targetExt = ImageConversionService.NormalizeExtension(options.TargetExtension);
@@ -554,7 +557,7 @@ namespace PicMark
         {
             _convertButton.IsEnabled = !_running && HasSource();
             if (_running) return;
-            _statusText.Text = HasSource() ? $"准备输出为 {FormatName(_targetExtension)}" : string.Empty;
+            _statusText.Text = HasSource() ? $"准备另存为 {FormatName(_targetExtension)}" : string.Empty;
         }
 
         private void UpdateQualityText()
@@ -566,11 +569,11 @@ namespace PicMark
         {
             _running = running;
             _convertButton.IsEnabled = !running;
-            _convertButton.Content = running ? "转换中..." : "开始转换";
+            _convertButton.Content = running ? "另存中..." : "开始另存";
             if (running)
             {
                 _resultActions.Visibility = Visibility.Collapsed;
-                _statusText.Text = "正在转换，请稍候...";
+                _statusText.Text = "正在另存，请稍候...";
             }
         }
 

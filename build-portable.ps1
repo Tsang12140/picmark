@@ -19,6 +19,8 @@ $ProgramFiles = [Environment]::GetFolderPath("ProgramFiles")
 $ProgramFilesX86 = [Environment]::GetFolderPath("ProgramFilesX86")
 $MsBuildCandidates = @(
     (Join-Path $ProgramFilesX86 "Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe"),
+    (Join-Path $ProgramFiles "Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"),
+    (Join-Path $ProgramFiles "Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe"),
     (Join-Path $ProgramFiles "Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"),
     (Join-Path $ProgramFilesX86 "Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe")
 )
