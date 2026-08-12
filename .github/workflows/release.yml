@@ -1,0 +1,189 @@
+name: Build and publish PicMark
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing version tag to publish, for example v0.3.1"
+        required: true
+        type: string
+
+# A release is only made public after the S4 upload succeeds.
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build, upload and release
+    runs-on: windows-2022
+    env:
+      S4_BUCKET: ${{ secrets.S4_BUCKET }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.S4_AK }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.S4_SK }}
+      AWS_DEFAULT_REGION: cn-east-1
+      S4_ENDPOINT: https://s3.bitiful.net
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.release_tag || github.ref }}
+
+      - name: Determine and validate release version
+        id: release
+        shell: pwsh
+        run: |
+          $tag = "${{ inputs.release_tag }}"
+          if ([string]::IsNullOrWhiteSpace($tag)) { $tag = "${{ github.ref_name }}" }
+          if ($tag -notmatch '^v(?<version>\d+\.\d+\.\d+)$') {
+            throw "Release tag must use vMAJOR.MINOR.PATCH, for example v0.3.1."
+          }
+
+          $version = $Matches.version
+          $assemblyInfo = Get-Content 'src/PicMark/Properties/AssemblyInfo.cs' -Raw
+          $match = [regex]::Match($assemblyInfo, 'AssemblyFileVersion\("(?<version>[^"]+)"\)')
+          if (-not $match.Success) { throw 'AssemblyFileVersion was not found.' }
+
+          $assemblyVersion = $match.Groups['version'].Value
+          if ($assemblyVersion.EndsWith('.0')) { $assemblyVersion = $assemblyVersion.Substring(0, $assemblyVersion.Length - 2) }
+          if ($assemblyVersion -ne $version) {
+            throw "Tag $tag does not match AssemblyFileVersion $assemblyVersion."
+          }
+
+          $updateManifest = Get-Content 'docs/update.json' -Raw | ConvertFrom-Json
+          if ($updateManifest.latestVersion -ne $version) {
+            throw "docs/update.json must declare latestVersion $version before publishing."
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore NuGet packages
+        shell: pwsh
+        run: nuget restore src/PicMark.sln
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --yes --no-progress --limit-output
+
+      - name: Build portable application
+        shell: pwsh
+        run: .\build-portable.ps1
+
+      - name: Build installer and release files
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $iscc = 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "Inno Setup compiler was not found at $iscc" }
+
+          & $iscc "/DMyAppVersion=$env:RELEASE_VERSION" 'installer\PicMark.iss'
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+
+          $releaseDir = Join-Path $PWD 'release'
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+
+          $portableZip = Join-Path $releaseDir "PicMark-portable-$env:RELEASE_VERSION.zip"
+          Compress-Archive -Path 'dist\PicMark-portable\*' -DestinationPath $portableZip -CompressionLevel Optimal
+
+          $setup = "installer\Output\PicMark-Setup-$env:RELEASE_VERSION.exe"
+          if (-not (Test-Path $setup)) { throw "Installer was not created: $setup" }
+          Copy-Item -LiteralPath $setup -Destination $releaseDir
+          Copy-Item -LiteralPath 'docs\update.json' -Destination (Join-Path $releaseDir 'update.json')
+
+          $assets = Get-ChildItem -LiteralPath $releaseDir -File | Where-Object { $_.Name -ne 'SHA256SUMS.txt' }
+          $checksums = foreach ($asset in $assets) {
+            $hash = (Get-FileHash -LiteralPath $asset.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($asset.Name)"
+          }
+          Set-Content -LiteralPath (Join-Path $releaseDir 'SHA256SUMS.txt') -Value $checksums -Encoding ascii
+
+          $releaseManifest = [ordered]@{
+            version = $env:RELEASE_VERSION
+            tag = $env:RELEASE_TAG
+            generatedAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+            objects = @(
+              Get-ChildItem -LiteralPath $releaseDir -File | ForEach-Object {
+                [ordered]@{
+                  name = $_.Name
+                  key = "picmark/releases/$env:RELEASE_TAG/$($_.Name)"
+                  bytes = $_.Length
+                  sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                }
+              }
+            )
+          }
+          $releaseManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $releaseDir 'release-manifest.json') -Encoding utf8
+
+      - name: Upload release assets to Bitiful S4
+        id: s4_upload
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ([string]::IsNullOrWhiteSpace($env:S4_BUCKET) -or
+              [string]::IsNullOrWhiteSpace($env:AWS_ACCESS_KEY_ID) -or
+              [string]::IsNullOrWhiteSpace($env:AWS_SECRET_ACCESS_KEY)) {
+            throw 'S4_AK, S4_SK and S4_BUCKET repository secrets are required.'
+          }
+
+          aws --version
+          aws configure set default.s3.addressing_style virtual
+
+          $prefix = "s3://$env:S4_BUCKET/picmark/releases/$env:RELEASE_TAG"
+          Get-ChildItem -LiteralPath 'release' -File | ForEach-Object {
+            $remote = "$prefix/$($_.Name)"
+            aws --endpoint-url $env:S4_ENDPOINT s3 cp $_.FullName $remote --no-progress --only-show-errors
+            if ($LASTEXITCODE -ne 0) { throw "S4 upload failed: $($_.Name)" }
+
+            $head = aws --endpoint-url $env:S4_ENDPOINT s3api head-object --bucket $env:S4_BUCKET --key "picmark/releases/$env:RELEASE_TAG/$($_.Name)" --output json | ConvertFrom-Json
+            if ($head.ContentLength -ne $_.Length) {
+              throw "S4 verification failed for $($_.Name): expected $($_.Length) bytes, got $($head.ContentLength)."
+            }
+          }
+
+          # Upload this last: future clients only see a manifest after every asset exists.
+          aws --endpoint-url $env:S4_ENDPOINT s3 cp 'docs/update.json' "s3://$env:S4_BUCKET/picmark/update.json" --content-type 'application/json' --no-progress --only-show-errors
+          if ($LASTEXITCODE -ne 0) { throw 'S4 update manifest upload failed.' }
+
+          $updateHead = aws --endpoint-url $env:S4_ENDPOINT s3api head-object --bucket $env:S4_BUCKET --key 'picmark/update.json' --output json | ConvertFrom-Json
+          if ($updateHead.ContentLength -le 0) { throw 'S4 verification failed for picmark/update.json.' }
+          $releasePrefix = "s3://$env:S4_BUCKET/picmark/releases/$env:RELEASE_TAG/"
+          "s4_prefix=$releasePrefix" >> $env:GITHUB_OUTPUT
+
+          @"
+          ## Bitiful S4 upload verified
+
+          - Bucket: ``$env:S4_BUCKET``
+          - Release prefix: ``picmark/releases/$env:RELEASE_TAG/``
+          - Verified files: $((Get-ChildItem -LiteralPath 'release' -File).Count) release files + ``picmark/update.json``
+          - Verification: each uploaded release file was read back with ``s3api head-object`` and checked against its local byte size.
+          "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          S4_PREFIX: ${{ steps.s4_upload.outputs.s4_prefix }}
+        run: |
+          $files = Get-ChildItem -LiteralPath 'release' -File | ForEach-Object { $_.FullName }
+          $notes = @"
+## S4 upload verified
+
+All release files and `picmark/update.json` were uploaded to Bitiful S4 and read-back verified.
+
+Verified S4 prefix (not a public download link): `$env:S4_PREFIX`
+
+This GitHub Release is created only after verification succeeds.
+"@
+          Set-Content -LiteralPath 'release\S4-UPLOAD-VERIFIED.md' -Value $notes -Encoding utf8
+          gh release create $env:RELEASE_TAG $files --repo $env:GITHUB_REPOSITORY --title "PicMark $env:RELEASE_TAG" --notes-file 'release\S4-UPLOAD-VERIFIED.md'

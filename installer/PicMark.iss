@@ -7,7 +7,9 @@
 ;  以上均需要安装时联网（与绝大多数 Windows 应用安装器的前提一致）；若用户机器已满足条件，则不会触发任何下载。
 
 #define MyAppName "见微 PicMark"
-#define MyAppVersion "0.3.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "0.3.0"
+#endif
 #define MyAppPublisher "PicMark"
 #define MyAppExeName "PicMark.exe"
 #define MyBuildOutput "..\src\PicMark\bin\Release"
@@ -40,6 +42,9 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: 
 Name: "contextmenu"; Description: "在图片右键菜单中添加“用见微打开”"; GroupDescription: "附加任务："; Flags: checkedonce
 Name: "batchcropmenu"; Description: "在图片和文件夹右键菜单中添加“批量裁切”"; GroupDescription: "附加任务："; Flags: checkedonce
 Name: "fileassoc"; Description: "注册为图片打开方式候选应用"; GroupDescription: "附加任务："; Flags: unchecked
+; 首次安装时才显示；选择会在 PicMark 第一次启动时写入本地设置。
+Name: "autoupdate"; Description: "自动检查更新（推荐）"; GroupDescription: "更新与隐私："; Flags: checkedonce; Check: IsFirstPicMarkInstall
+Name: "telemetry"; Description: "发送匿名启动与兼容性信息，帮助改进 PicMark"; GroupDescription: "更新与隐私："; Flags: unchecked; Check: IsFirstPicMarkInstall
 
 [Files]
 Source: "{#MyBuildOutput}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
@@ -164,7 +169,34 @@ Root: HKCR; Subkey: "Directory\shell\PicMarkBatchCrop\command"; ValueType: strin
 [Code]
 const
   PerUserInstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{B7E1B6B0-6B2E-4E8B-9C8B-2F6F1F3A9001}_is1';
+  PicMarkInstallOptionsKey = 'Software\PicMark\InstallOptions';
 
+function IsFirstPicMarkInstall(): Boolean;
+begin
+  Result := not FileExists(ExpandConstant('{localappdata}\PicMark\settings.txt'));
+end;
+
+procedure SaveFirstRunOnlineChoices();
+begin
+  if not IsFirstPicMarkInstall() then
+    Exit;
+
+  if WizardIsTaskSelected('autoupdate') then
+    RegWriteStringValue(HKCU, PicMarkInstallOptionsKey, 'AutoCheckUpdates', 'true')
+  else
+    RegWriteStringValue(HKCU, PicMarkInstallOptionsKey, 'AutoCheckUpdates', 'false');
+
+  if WizardIsTaskSelected('telemetry') then
+    RegWriteStringValue(HKCU, PicMarkInstallOptionsKey, 'TelemetryConsent', 'Allowed')
+  else
+    RegWriteStringValue(HKCU, PicMarkInstallOptionsKey, 'TelemetryConsent', 'Denied');
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    SaveFirstRunOnlineChoices();
+end;
 function ExtractExecutablePath(const CommandLine: String): String;
 var
   EndQuote: Integer;

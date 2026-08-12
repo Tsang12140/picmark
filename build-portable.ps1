@@ -21,7 +21,9 @@ $MsBuildCandidates = @(
     (Join-Path $ProgramFilesX86 "Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe"),
     (Join-Path $ProgramFiles "Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"),
     (Join-Path $ProgramFiles "Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe"),
+    (Join-Path $ProgramFiles "Microsoft Visual Studio\18\Enterprise\MSBuild\Current\Bin\MSBuild.exe"),
     (Join-Path $ProgramFiles "Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe"),
+    (Join-Path $ProgramFiles "Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe"),
     (Join-Path $ProgramFilesX86 "Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe")
 )
 $MsBuild = $MsBuildCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -32,8 +34,22 @@ if (-not $MsBuild) {
 }
 
 Write-Host "  MSBuild: $MsBuild" -ForegroundColor Gray
-& $MsBuild $SlnPath /p:Configuration=Release /p:Platform="Any CPU" `
-    /p:FrameworkPathOverride="C:\tmp\picmark-net472-refs\pkg\build\.NETFramework\v4.7.2" /m
+$MsBuildArguments = @(
+    $SlnPath,
+    "/p:Configuration=Release",
+    "/p:Platform=Any CPU",
+    "/m"
+)
+
+# A legacy reference pack exists on some local development machines, but not on
+# clean CI runners. Let MSBuild use the installed .NET Framework targeting pack
+# when that local override is unavailable.
+$LegacyFrameworkPath = "C:\tmp\picmark-net472-refs\pkg\build\.NETFramework\v4.7.2"
+if (Test-Path $LegacyFrameworkPath) {
+    $MsBuildArguments += "/p:FrameworkPathOverride=$LegacyFrameworkPath"
+}
+
+& $MsBuild @MsBuildArguments
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Build failed. Exit code: $LASTEXITCODE" -ForegroundColor Red

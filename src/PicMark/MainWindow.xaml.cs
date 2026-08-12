@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -34,6 +35,12 @@ namespace PicMark
         private string _currentProjectPath;
         private string _currentExtension = ".png";
 
+        // The recent-files start page owns at most eight small previews.
+        // Keeping the cache session-local avoids re-decoding large local files during resize.
+        private readonly Dictionary<string, BitmapSource> _recentFileThumbnailCache = new Dictionary<string, BitmapSource>(StringComparer.OrdinalIgnoreCase);
+        private int _recentFilesVisibleLimit = -1;
+        private double _recentFilesListWidth = -1;
+
         private readonly List<string> _batchFiles = new List<string>();
         private int _batchIndex = -1;
         private const string BatchWatermarkOutputFolderName = "PicMark_水印输出";
@@ -41,6 +48,8 @@ namespace PicMark
         private int _batchWatermarkIndex = -1;
         private bool _batchWatermarkMode;
         private bool _batchWatermarkProcessing;
+        private bool _preserveEditorStateBatch;
+        private EditorSessionState _editorSessionState;
         private readonly List<string> _viewerFiles = new List<string>();
         private int _viewerIndex = -1;
         private bool _hasUnsavedChanges;
@@ -53,6 +62,7 @@ namespace PicMark
         private double _panStartHorizontalOffset;
         private double _panStartVerticalOffset;
         private readonly DispatcherTimer _shapeHintTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2.2) };
+        private readonly DispatcherTimer _watermarkDefaultsSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(550) };
         private bool _initializingWatermarkUi = true;
         private WatermarkStyle _watermarkStyle = WatermarkStyle.DiamondGrid;
         private WatermarkLayout _watermarkLayout = WatermarkLayout.Tiled;
@@ -74,6 +84,14 @@ namespace PicMark
         private UpdateCheckResult _lastUpdateCheck;
         private string _telemetryUrl;
 
+        private sealed class EditorSessionState
+        {
+            public BatchWatermarkProfile WatermarkProfile { get; set; }
+            public AnnotationCanvas.CropSessionState CropSession { get; set; }
+            public bool WatermarkActive { get; set; }
+            public bool CropActive { get; set; }
+        }
+
         private sealed class OpenWithApplication
         {
             public string DisplayName { get; set; }
@@ -94,6 +112,7 @@ namespace PicMark
             }
 
             _settings = AppSettings.Load();
+            UpdateTitleUpdateUi();
             EnsureInitialWindowLayout();
             ApplyWindowSettings();
             Canvas1.AnnotationsChanged += (s, e) => { if (!_loadingDocument) MarkDirty(); };
@@ -112,6 +131,7 @@ namespace PicMark
             Closing += MainWindow_Closing;
             StateChanged += MainWindow_StateChanged;
             SizeChanged += MainWindow_SizeChanged;
+            Loaded += (s, e) => UpdateRecentFilesUi(false);
             DpiChanged += MainWindow_DpiChanged;
             Scroller.PreviewMouseWheel += Scroller_PreviewMouseWheel;
             Scroller.PreviewMouseLeftButtonDown += Scroller_PreviewMouseLeftButtonDown;
@@ -120,14 +140,16 @@ namespace PicMark
             ImageStage.MouseMove += ImageStage_MouseMove;
             ImageStage.MouseLeave += ImageStage_MouseLeave;
             _shapeHintTimer.Tick += ShapeHintTimer_Tick;
+            _watermarkDefaultsSaveTimer.Tick += WatermarkDefaultsSaveTimer_Tick;
             ApplyOptionSettings();
-            WatermarkTextBox.Text = BuildCertificateWatermarkText();
+            ApplyWatermarkPresetToControls(_settings.LastWatermarkPreset);
             _initializingWatermarkUi = false;
             UpdateWatermarkControls();
             HistoryCacheText.Text = _settings.HistoryCacheMb.ToString();
             UpdateHistoryCacheInfo();
             UpdateRecentFilesUi();
             UpdateRecentLogoUi();
+            UpdateWatermarkTextHistoryUi();
             SetMosaicMode(MosaicMode.Pixelate);
             SetMosaicStrength(18);
             SetImageWorkspaceVisible(false);
@@ -158,6 +180,14 @@ namespace PicMark
             if (_fitToWindow && Canvas1.Image != null)
                 FitImageAfterLayout();
             UpdateBottomOverlayConstraints();
+            if (Canvas1.Image == null)
+                UpdateRecentFilesUi(false);
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                UpdateBottomOverlayConstraints();
+                if (Canvas1.Image == null)
+                    UpdateRecentFilesUi(false);
+            }), DispatcherPriority.Loaded);
         }
 
         private void MainWindow_DpiChanged(object sender, DpiChangedEventArgs e)
@@ -410,6 +440,7 @@ namespace PicMark
 
         private void SaveWindowSettings()
         {
+            SaveWatermarkDefaultsNow();
             ApplyHistoryCacheSetting(false);
             var bounds = WindowState == WindowState.Normal ? new Rect(Left, Top, Width, Height) : RestoreBounds;
             _settings.WindowLeft = bounds.Left;
@@ -430,9 +461,16 @@ namespace PicMark
         {
             if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
-            if (files.Length == 0) return;
+            if (files == null || files.Length == 0) return;
 
-            if (!ConfirmDiscardUnsavedChanges("打开新图片")) return;
+            var imageFiles = files.Where(File.Exists).Where(IsSupportedImagePath).ToArray();
+            if (HasReusableEditorSession() && imageFiles.Length == files.Length)
+            {
+                StartPreservedEditorSession(imageFiles);
+                return;
+            }
+
+            if (!ConfirmDiscardUnsavedChanges("\u6253\u5f00\u65b0\u56fe\u7247")) return;
             if (files.Length == 1 && IsProjectPath(files[0]))
             {
                 ClearBatch();
@@ -497,6 +535,8 @@ namespace PicMark
 
         private void StartBatch(string[] files)
         {
+            _preserveEditorStateBatch = false;
+            _editorSessionState = null;
             _batchFiles.Clear();
             _batchFiles.AddRange(files);
             _batchIndex = 0;
@@ -509,7 +549,78 @@ namespace PicMark
         {
             _batchFiles.Clear();
             _batchIndex = -1;
+            _preserveEditorStateBatch = false;
+            _editorSessionState = null;
             UpdateBatchBar();
+        }
+
+        private bool HasReusableEditorSession()
+        {
+            if (!_editMode || _batchWatermarkMode || Canvas1.Image == null) return false;
+            bool watermarkActive = WatermarkPanel.Visibility == Visibility.Visible && Canvas1.GetWatermark()?.Enabled == true;
+            return watermarkActive || Canvas1.CurrentTool == AnnotationTool.Crop;
+        }
+
+        private EditorSessionState CaptureEditorSessionState()
+        {
+            var watermark = Canvas1.GetWatermark();
+            return new EditorSessionState
+            {
+                WatermarkActive = WatermarkPanel.Visibility == Visibility.Visible && watermark?.Enabled == true,
+                CropActive = Canvas1.CurrentTool == AnnotationTool.Crop,
+                WatermarkProfile = BatchWatermarkProfile.Create(watermark, Canvas1.Image),
+                CropSession = Canvas1.CaptureCropSession()
+            };
+        }
+
+        private void StartPreservedEditorSession(IEnumerable<string> paths)
+        {
+            var files = (paths ?? Enumerable.Empty<string>())
+                .Where(File.Exists)
+                .Where(IsSupportedImagePath)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (files.Count == 0) return;
+
+            _editorSessionState = CaptureEditorSessionState();
+            _preserveEditorStateBatch = true;
+            _batchFiles.Clear();
+            _batchFiles.AddRange(files);
+            _batchIndex = 0;
+            SetViewerFiles(_batchFiles, _batchFiles[0]);
+            LoadImageWithEditorSession(_batchFiles[0], _editorSessionState);
+            UpdateBatchBar();
+            UpdateStatus("\u5df2\u6362\u6210\u65b0\u56fe\uff0c\u6c34\u5370\u6216\u88c1\u5207\u8bbe\u7f6e\u5df2\u4fdd\u7559\u3002");
+        }
+
+        private void LoadImageWithEditorSession(string path, EditorSessionState state)
+        {
+            LoadImage(path, false);
+            if (Canvas1.Image == null || state == null) return;
+
+            SetEditMode(true, false);
+            if (state.WatermarkProfile != null)
+            {
+                var watermark = state.WatermarkProfile.CreateFor(Canvas1.Image);
+                Canvas1.SetWatermark(watermark, notifyChanged: false, notifyWatermarkChanged: true);
+                _hasSelectedWatermarkTemplate = watermark != null;
+            }
+
+            WatermarkPanel.Visibility = state.WatermarkActive ? Visibility.Visible : Visibility.Collapsed;
+            WatermarkParametersPanel.Visibility = state.WatermarkActive ? Visibility.Visible : Visibility.Collapsed;
+            if (state.CropActive)
+            {
+                SetActiveTool("Crop");
+                Canvas1.RestoreCropSession(state.CropSession);
+            }
+            else
+            {
+                SetActiveTool("Select");
+            }
+
+            _hasUnsavedChanges = false;
+            UpdateWatermarkControls();
+            UpdateViewerNavigation();
         }
 
         private void BtnPrevImage_Click(object sender, RoutedEventArgs e) => GoToBatchIndex(_batchIndex - 1);
@@ -519,6 +630,16 @@ namespace PicMark
         {
             if (newIndex < 0 || newIndex >= _batchFiles.Count) return;
             if (newIndex == _batchIndex) return;
+
+            if (_preserveEditorStateBatch)
+            {
+                _editorSessionState = CaptureEditorSessionState();
+                _batchIndex = newIndex;
+                SetViewerFiles(_batchFiles, _batchFiles[_batchIndex]);
+                LoadImageWithEditorSession(_batchFiles[_batchIndex], _editorSessionState);
+                UpdateBatchBar();
+                return;
+            }
 
             if (_hasUnsavedChanges)
             {
@@ -542,7 +663,9 @@ namespace PicMark
             if (_batchFiles.Count > 1)
             {
                 BatchBar.Visibility = Visibility.Visible;
-                BatchPositionText.Text = $"第 {_batchIndex + 1} 张，共 {_batchFiles.Count} 张：{Path.GetFileName(_batchFiles[_batchIndex])}";
+                BatchPositionText.Text = _preserveEditorStateBatch
+                    ? $"\u7edf\u4e00\u8bbe\u7f6e\uff1a\u7b2c {_batchIndex + 1} \u5f20\uff0c\u5171 {_batchFiles.Count} \u5f20\uff1a{Path.GetFileName(_batchFiles[_batchIndex])}"
+                    : $"\u7b2c {_batchIndex + 1} \u5f20\uff0c\u5171 {_batchFiles.Count} \u5f20\uff1a{Path.GetFileName(_batchFiles[_batchIndex])}";
             }
             else
             {
@@ -898,66 +1021,67 @@ namespace PicMark
 
         private void ApplyChromeTheme(bool editMode)
         {
-            if (editMode)
-            {
-                SetResourceColor("TextPrimaryBrush", Color.FromRgb(0xF4, 0xF4, 0xF5));
-                SetResourceColor("TextSecondaryBrush", Color.FromRgb(0xB9, 0xBE, 0xC7));
-                SetResourceColor("ToolbarBrush", Color.FromRgb(0x25, 0x25, 0x25));
-                SetResourceColor("TitleBarBrush", Color.FromRgb(0x1C, 0x1C, 0x1C));
-                SetResourceColor("BorderBrush1", Color.FromRgb(0x46, 0x46, 0x46));
-                SetResourceColor("HoverBrush", Color.FromRgb(0x3F, 0x3F, 0x3F));
-                SetResourceColor("PressedBrush", Color.FromRgb(0x4A, 0x4A, 0x4A));
+            // Viewing and editing share one quiet light workspace. Editing is marked by
+            // the active tool, not by turning the whole application into a dark window.
+            SetResourceColor("TextPrimaryBrush", Color.FromRgb(0x1F, 0x2A, 0x37));
+            SetResourceColor("TextSecondaryBrush", Color.FromRgb(0x64, 0x74, 0x8A));
+            SetResourceColor("PanelBrush", Color.FromRgb(0xFF, 0xFF, 0xFF));
+            SetResourceColor("ToolbarBrush", Color.FromRgb(0xFF, 0xFF, 0xFF));
+            SetResourceColor("TitleBarBrush", Color.FromRgb(0xF8, 0xFA, 0xFC));
+            SetResourceColor("BorderBrush1", Color.FromRgb(0xE1, 0xE8, 0xF0));
+            SetResourceColor("HoverBrush", Color.FromRgb(0xF1, 0xF5, 0xF9));
+            SetResourceColor("PressedBrush", Color.FromRgb(0xE8, 0xED, 0xF4));
+            SetResourceColor("TitleBarControlHoverBrush", Color.FromRgb(0xEA, 0xEF, 0xF5));
+            SetResourceColor("TitleBarControlPressedBrush", Color.FromRgb(0xE1, 0xE8, 0xF0));
+            SetResourceColor("TitleUpdateHoverBrush", Color.FromRgb(0xF1, 0xF3, 0xFF));
+            SetResourceColor("TitleUpdatePressedBrush", Color.FromRgb(0xE8, 0xEB, 0xFF));
 
-                Background = BrushFromRgb(0x24, 0x24, 0x24);
-                MainWorkspace.Background = BrushFromRgb(0x24, 0x24, 0x24);
-                ImageStage.Background = BrushFromRgb(0x24, 0x24, 0x24);
-                Scroller.Background = BrushFromRgb(0x24, 0x24, 0x24);
-                TitleBar.BorderBrush = BrushFromRgb(0x38, 0x38, 0x38);
-                TopToolbar.BorderBrush = BrushFromRgb(0x38, 0x38, 0x38);
-                ApplyWindowFrame(true);
-                SetFloatingBadgeTheme(BrushFromArgb(0xCC, 0x30, 0x30, 0x30), BrushFromRgb(0x45, 0x45, 0x45), BrushFromRgb(0xD5, 0xD8, 0xDF));
-                ApplyTitleFileInfoTheme(true);
-                if (CanvasShadow != null && !CanvasShadow.IsFrozen)
-                {
-                    CanvasShadow.BlurRadius = 28;
-                    CanvasShadow.ShadowDepth = 8;
-                    CanvasShadow.Opacity = 0.45;
-                }
-            }
-            else
-            {
-                SetResourceColor("TextPrimaryBrush", Color.FromRgb(0x1F, 0x2A, 0x37));
-                SetResourceColor("TextSecondaryBrush", Color.FromRgb(0x4F, 0x5D, 0x6C));
-                SetResourceColor("ToolbarBrush", Color.FromRgb(0xF2, 0xF6, 0xF8));
-                SetResourceColor("TitleBarBrush", Color.FromRgb(0xF2, 0xF6, 0xF8));
-                SetResourceColor("BorderBrush1", Color.FromRgb(0xCB, 0xD9, 0xE2));
-                SetResourceColor("HoverBrush", Color.FromRgb(0xE2, 0xEC, 0xF2));
-                SetResourceColor("PressedBrush", Color.FromRgb(0xD4, 0xE1, 0xEA));
+            var workspace = BrushFromRgb(0xF4, 0xF6, 0xF8);
+            Background = workspace;
+            MainWorkspace.Background = workspace;
+            ImageStage.Background = workspace;
+            Scroller.Background = workspace;
+            TitleBar.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
+            TopToolbar.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
+            ApplyWindowFrame(false);
+            SetFloatingBadgeTheme(BrushFromArgb(0xF8, 0xFF, 0xFF, 0xFF), BrushFromRgb(0xE1, 0xE8, 0xF0), BrushFromRgb(0x33, 0x41, 0x55));
+            ApplyTitleFileInfoTheme(false);
 
-                Background = BrushFromRgb(0xE8, 0xF0, 0xF2);
-                MainWorkspace.Background = BrushFromRgb(0xE8, 0xF0, 0xF2);
-                ImageStage.Background = BrushFromRgb(0xE8, 0xF0, 0xF2);
-                Scroller.Background = BrushFromRgb(0xE8, 0xF0, 0xF2);
-                TitleBar.BorderBrush = BrushFromRgb(0xCB, 0xD9, 0xE2);
-                TopToolbar.BorderBrush = BrushFromRgb(0xCB, 0xD9, 0xE2);
-                ApplyWindowFrame(false);
-                SetFloatingBadgeTheme(BrushFromArgb(0xF6, 0xF7, 0xFA, 0xFB), BrushFromRgb(0xB9, 0xCB, 0xD8), BrushFromRgb(0x2B, 0x37, 0x48));
-                ApplyTitleFileInfoTheme(false);
-                if (CanvasShadow != null && !CanvasShadow.IsFrozen)
-                {
-                    CanvasShadow.BlurRadius = 24;
-                    CanvasShadow.ShadowDepth = 6;
-                    CanvasShadow.Opacity = 0.18;
-                }
+            if (CanvasShadow != null && !CanvasShadow.IsFrozen)
+            {
+                CanvasShadow.BlurRadius = 22;
+                CanvasShadow.ShadowDepth = 5;
+                CanvasShadow.Opacity = 0.14;
             }
-            ApplyZoomComboTheme(editMode);
-            ApplyPopupTheme(editMode);
-            ApplyContextMenuTheme(editMode);
+
+            ApplyZoomComboTheme(false);
+            ApplyPopupTheme(false);
+            ApplyContextMenuTheme(false);
             ApplyTopToolbarMode(editMode);
-            ApplyButtonPalette(editMode);
-            ApplyWindowButtonPalette(editMode);
+            ApplyButtonPalette(false);
+            ApplyWindowButtonPalette(false);
+            ApplyEditorPanelTheme();
+            UpdateTitleUpdateUi();
         }
 
+        private void ApplyEditorPanelTheme()
+        {
+            if (RightEditPanel != null)
+            {
+                RightEditPanel.Background = Brushes.White;
+                RightEditPanel.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
+            }
+            if (CropPanel != null)
+            {
+                CropPanel.Background = Brushes.White;
+                CropPanel.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
+            }
+            if (WatermarkPanel != null)
+            {
+                WatermarkPanel.Background = Brushes.White;
+                WatermarkPanel.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
+            }
+        }
         private void ApplyTitleFileInfoTheme(bool editMode)
         {
             if (TitleFileInfoText == null) return;
@@ -965,6 +1089,11 @@ namespace PicMark
             TitleFileInfoText.Foreground = editMode
                 ? BrushFromRgb(0xF4, 0xF4, 0xF5)
                 : BrushFromRgb(0x18, 0x22, 0x30);
+
+            if (TitleVersionText != null)
+                TitleVersionText.Foreground = editMode
+                    ? BrushFromRgb(0x9B, 0xA6, 0xB7)
+                    : BrushFromRgb(0x72, 0x80, 0x91);
         }
 
         private void ApplyWindowFrame(bool editMode)
@@ -994,7 +1123,7 @@ namespace PicMark
             else
             {
                 WindowShell.Margin = new Thickness(0);
-                WindowShell.CornerRadius = new CornerRadius(8);
+                WindowShell.CornerRadius = new CornerRadius(12);
                 WindowShell.BorderThickness = new Thickness(1);
                 WindowShell.Padding = new Thickness(0);
 
@@ -1350,11 +1479,15 @@ namespace PicMark
 
         private void SetResourceColor(string key, Color color)
         {
-            if (TryFindResource(key) is SolidColorBrush brush)
+            if (TryFindResource(key) is SolidColorBrush brush && !brush.IsFrozen)
             {
-                if (!brush.IsFrozen)
-                    brush.Color = color;
+                brush.Color = color;
+                return;
             }
+
+            // Styles may freeze a brush resolved with StaticResource. Replacing the
+            // resource keeps DynamicResource consumers in sync with the active theme.
+            Resources[key] = new SolidColorBrush(color);
         }
 
         private static SolidColorBrush BrushFromRgb(byte r, byte g, byte b) =>
@@ -1476,8 +1609,8 @@ namespace PicMark
             SetActiveTool("Select");
             if (Canvas1.GetWatermark() == null)
             {
-                SelectWatermarkTemplate("CertificateGrid", true);
-                UpdateStatus("已自动套用证件网格水印，可在右侧继续调整。");
+                ApplyWatermarkPreset(_settings.LastWatermarkPreset);
+                UpdateStatus("\u5df2\u5e94\u7528\u4e0a\u6b21\u7684\u6c34\u5370\u8bbe\u7f6e\uff0c\u53ef\u5728\u53f3\u4fa7\u7ee7\u7eed\u8c03\u6574\u3002");
             }
             else
             {
@@ -1492,6 +1625,237 @@ namespace PicMark
 
         private static string BuildCertificateWatermarkText() =>
             $"本证件/文件仅用于XX\n挪作他用无效 {DateTime.Now:yyyy年M月d日}";
+
+        private static string NormalizeWatermarkTemplate(string template)
+        {
+            switch (template)
+            {
+                case "TiledText":
+                case "SingleText":
+                case "ImageLogo":
+                case "CertificateGrid":
+                    return template;
+                default:
+                    return "CertificateGrid";
+            }
+        }
+
+        private void QueueWatermarkDefaultsSave()
+        {
+            if (_initializingWatermarkUi) return;
+            _watermarkDefaultsSaveTimer.Stop();
+            _watermarkDefaultsSaveTimer.Start();
+        }
+
+        private void WatermarkDefaultsSaveTimer_Tick(object sender, EventArgs e)
+        {
+            _watermarkDefaultsSaveTimer.Stop();
+            SaveWatermarkDefaultsNow();
+        }
+
+        private static double ClampWatermarkSlider(Slider slider, double value)
+        {
+            return Math.Max(slider.Minimum, Math.Min(slider.Maximum, value));
+        }
+
+        private static string FormatWatermarkColor(Color color) =>
+            $"#{color.A:X2}{color.R:X2}{color.G:X2}{color.B:X2}";
+
+        private static Color ParseWatermarkColor(string value, Color fallback)
+        {
+            try
+            {
+                object converted = ColorConverter.ConvertFromString(value);
+                return converted is Color color ? color : fallback;
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
+        private string GetCurrentWatermarkTemplate()
+        {
+            if (_watermarkStyle == WatermarkStyle.ImageLogo) return "ImageLogo";
+            if (_watermarkLayout == WatermarkLayout.Single) return "SingleText";
+            return _watermarkStyle == WatermarkStyle.TextOnly ? "TiledText" : "CertificateGrid";
+        }
+
+        private void ApplyWatermarkPresetToControls(WatermarkPreset source)
+        {
+            var preset = source?.Clone() ?? new WatermarkPreset();
+            string template = NormalizeWatermarkTemplate(preset.Template);
+            bool wasInitializing = _initializingWatermarkUi;
+            _initializingWatermarkUi = true;
+            switch (template)
+            {
+                case "TiledText":
+                    _watermarkStyle = WatermarkStyle.TextOnly;
+                    _watermarkLayout = WatermarkLayout.Tiled;
+                    break;
+                case "SingleText":
+                    _watermarkStyle = WatermarkStyle.TextOnly;
+                    _watermarkLayout = WatermarkLayout.Single;
+                    break;
+                case "ImageLogo":
+                    _watermarkStyle = WatermarkStyle.ImageLogo;
+                    _watermarkLayout = WatermarkLayout.Single;
+                    break;
+                default:
+                    _watermarkStyle = WatermarkStyle.DiamondGrid;
+                    _watermarkLayout = WatermarkLayout.Tiled;
+                    break;
+            }
+
+            WatermarkTextBox.Text = string.IsNullOrWhiteSpace(preset.Text) && _watermarkStyle != WatermarkStyle.ImageLogo
+                ? BuildCertificateWatermarkText()
+                : preset.Text ?? string.Empty;
+            _watermarkFontFamily = string.IsNullOrWhiteSpace(preset.FontFamily) ? "Microsoft YaHei UI" : preset.FontFamily;
+            _watermarkBold = preset.Bold;
+            _watermarkColor = ParseWatermarkColor(preset.Color, Colors.Black);
+            _watermarkColorUserSelected = true;
+            _watermarkLogoPath = preset.LogoPath ?? string.Empty;
+            _watermarkLogoFlipHorizontal = preset.LogoFlipHorizontal;
+            _watermarkLogoFlipVertical = preset.LogoFlipVertical;
+            WatermarkOpacitySlider.Value = ClampWatermarkSlider(WatermarkOpacitySlider, preset.Opacity);
+            WatermarkFontSizeSlider.Value = ClampWatermarkSlider(WatermarkFontSizeSlider, preset.FontSize);
+            WatermarkAngleSlider.Value = ClampWatermarkSlider(WatermarkAngleSlider, preset.Angle);
+            WatermarkSpacingSlider.Value = ClampWatermarkSlider(WatermarkSpacingSlider, preset.Spacing);
+            WatermarkOffsetSlider.Value = ClampWatermarkSlider(WatermarkOffsetSlider, preset.HorizontalOffset);
+            WatermarkLogoScaleSlider.Value = ClampWatermarkSlider(WatermarkLogoScaleSlider, preset.LogoScalePercent);
+            _settings.WatermarkTemplate = template;
+            _settings.WatermarkText = WatermarkTextBox.Text;
+            _initializingWatermarkUi = wasInitializing;
+            UpdateWatermarkControls();
+        }
+
+        private WatermarkPreset CreateCurrentWatermarkPreset()
+        {
+            var watermark = Canvas1?.GetWatermark();
+            return new WatermarkPreset
+            {
+                Text = watermark?.Text ?? WatermarkTextBox?.Text ?? string.Empty,
+                Template = watermark != null ? GetWatermarkTemplate(watermark) : GetCurrentWatermarkTemplate(),
+                FontFamily = watermark?.FontFamilyName ?? _watermarkFontFamily,
+                Bold = watermark?.Bold ?? _watermarkBold,
+                Color = FormatWatermarkColor(watermark?.Color ?? _watermarkColor),
+                Opacity = (watermark?.Opacity ?? (WatermarkOpacitySlider?.Value ?? 20) / 100.0) * 100.0,
+                FontSize = watermark?.FontSize ?? WatermarkFontSizeSlider?.Value ?? 28,
+                Angle = watermark?.Angle ?? WatermarkAngleSlider?.Value ?? 0,
+                Spacing = watermark?.Spacing ?? WatermarkSpacingSlider?.Value ?? 204,
+                HorizontalOffset = watermark?.HorizontalOffset ?? WatermarkOffsetSlider?.Value ?? 0,
+                VerticalOffset = watermark?.VerticalOffset ?? 0,
+                LogoPath = watermark?.LogoPath ?? _watermarkLogoPath,
+                LogoScalePercent = watermark?.LogoScalePercent ?? WatermarkLogoScaleSlider?.Value ?? 18,
+                LogoFlipHorizontal = watermark?.LogoFlipHorizontal ?? _watermarkLogoFlipHorizontal,
+                LogoFlipVertical = watermark?.LogoFlipVertical ?? _watermarkLogoFlipVertical
+            };
+        }
+
+        private void SaveWatermarkDefaultsNow()
+        {
+            if (WatermarkTextBox == null) return;
+            var preset = CreateCurrentWatermarkPreset();
+            _settings.LastWatermarkPreset = preset.Clone();
+            _settings.WatermarkText = preset.Text;
+            _settings.WatermarkTemplate = preset.Template;
+            _settings.Save();
+            UpdateWatermarkTextHistoryUi();
+        }
+
+        private static bool IsRecordableWatermarkPreset(WatermarkPreset preset)
+        {
+            if (preset == null) return false;
+            return preset.Template == "ImageLogo"
+                ? !string.IsNullOrWhiteSpace(preset.LogoPath)
+                : !string.IsNullOrWhiteSpace(preset.Text);
+        }
+
+        private void SaveCurrentWatermarkPresetToHistory()
+        {
+            var preset = CreateCurrentWatermarkPreset();
+            if (!IsRecordableWatermarkPreset(preset)) return;
+
+            _settings.WatermarkPresetHistory.RemoveAll(item => item.IsEquivalentTo(preset));
+            _settings.WatermarkPresetHistory.Insert(0, preset.Clone());
+            while (_settings.WatermarkPresetHistory.Count > 12)
+                _settings.WatermarkPresetHistory.RemoveAt(_settings.WatermarkPresetHistory.Count - 1);
+            _settings.LastWatermarkPreset = preset.Clone();
+            _settings.WatermarkText = preset.Text;
+            _settings.WatermarkTemplate = preset.Template;
+            _settings.Save();
+            UpdateWatermarkTextHistoryUi();
+        }
+
+        private void ApplyWatermarkPreset(WatermarkPreset source)
+        {
+            var preset = source?.Clone() ?? new WatermarkPreset();
+            ApplyWatermarkPresetToControls(preset);
+            if (Canvas1.Image == null) return;
+
+            _hasSelectedWatermarkTemplate = true;
+            WatermarkParametersPanel.Visibility = Visibility.Visible;
+            ApplyWatermarkFromControls();
+            var watermark = Canvas1.GetWatermark();
+            if (watermark != null)
+            {
+                watermark.VerticalOffset = preset.VerticalOffset;
+                Canvas1.SetWatermark(watermark, notifyChanged: false, notifyWatermarkChanged: false);
+            }
+            QueueWatermarkDefaultsSave();
+        }
+
+        private void UpdateWatermarkTextHistoryUi()
+        {
+            if (WatermarkTextHistoryHost == null || WatermarkTextHistoryPanel == null) return;
+            WatermarkTextHistoryHost.Visibility = Visibility.Visible;
+            WatermarkTextHistoryPanel.Children.Clear();
+            foreach (WatermarkPreset preset in _settings.WatermarkPresetHistory.Take(12))
+            {
+                var button = new Button
+                {
+                    Tag = preset.Clone(),
+                    ToolTip = MakeWatermarkPresetPreview(preset),
+                    Height = 28,
+                    MaxWidth = 260,
+                    Margin = new Thickness(0, 0, 6, 6),
+                    Padding = new Thickness(8, 0, 8, 0),
+                    Style = (Style)FindResource("ToolButton"),
+                    Content = new TextBlock
+                    {
+                        Text = MakeWatermarkPresetPreview(preset),
+                        FontSize = 11,
+                        MaxWidth = 236,
+                        TextTrimming = TextTrimming.CharacterEllipsis
+                    }
+                };
+                button.Click += WatermarkTextHistory_Click;
+                WatermarkTextHistoryPanel.Children.Add(button);
+            }
+        }
+
+        private static string MakeWatermarkTextPreview(string text)
+        {
+            string preview = (text ?? string.Empty).Replace("\r", " ").Replace("\n", " ").Trim();
+            return preview.Length > 10 ? preview.Substring(0, 10) + "\u2026" : preview;
+        }
+
+        private static string MakeWatermarkPresetPreview(WatermarkPreset preset)
+        {
+            if (preset == null) return string.Empty;
+            if (preset.Template == "ImageLogo")
+                return $"Logo \u00b7 {preset.LogoScalePercent:0}%";
+            string layout = preset.Template == "SingleText" ? "\u5355\u4e2a" : preset.Template == "TiledText" ? "\u5e73\u94fa" : "\u7f51\u683c";
+            string weight = preset.Bold ? "\u52a0\u7c97" : "\u5e38\u89c4";
+            return $"{MakeWatermarkTextPreview(preset.Text)} \u00b7 {layout} \u00b7 {weight} \u00b7 {preset.FontSize:0}px";
+        }
+
+        private void WatermarkTextHistory_Click(object sender, RoutedEventArgs e)
+        {
+            if (!(sender is Button button) || !(button.Tag is WatermarkPreset preset)) return;
+            ApplyWatermarkPreset(preset);
+            WatermarkTextBox.Focus();
+        }
 
         private void WatermarkTemplate_Click(object sender, RoutedEventArgs e)
         {
@@ -1531,13 +1895,14 @@ namespace PicMark
                 default:
                     _watermarkStyle = WatermarkStyle.DiamondGrid;
                     _watermarkLayout = WatermarkLayout.Tiled;
-                    WatermarkTextBox.Text = BuildCertificateWatermarkText();
                     WatermarkAngleSlider.Value = 0;
                     break;
             }
             if (_watermarkStyle != WatermarkStyle.ImageLogo)
                 _watermarkColorUserSelected = false;
             _initializingWatermarkUi = false;
+            _settings.WatermarkTemplate = NormalizeWatermarkTemplate(template);
+            QueueWatermarkDefaultsSave();
             UpdateWatermarkControls();
             ApplyWatermarkFromControls(resetSinglePosition);
             if (template == "ImageLogo" && string.IsNullOrWhiteSpace(_watermarkLogoPath))
@@ -1588,6 +1953,7 @@ namespace PicMark
             }
             UpdateWatermarkControls();
             ApplyWatermarkFromControls();
+            QueueWatermarkDefaultsSave();
         }
 
         private void BtnAddLogoWatermark_Click(object sender, RoutedEventArgs e)
@@ -1743,6 +2109,7 @@ namespace PicMark
             }, notifyChanged: false, notifyWatermarkChanged: false);
             if (!_batchWatermarkMode)
                 _hasUnsavedChanges = true;
+            QueueWatermarkDefaultsSave();
         }
 
         private void ApplyAdaptiveWatermarkColorIfNeeded(BitmapSource image)
@@ -1793,6 +2160,14 @@ namespace PicMark
             }
         }
 
+        private static string GetWatermarkTemplate(WatermarkSettings watermark)
+        {
+            if (watermark == null) return "CertificateGrid";
+            if (watermark.Style == WatermarkStyle.ImageLogo) return "ImageLogo";
+            if (watermark.Layout == WatermarkLayout.Single) return "SingleText";
+            return watermark.Style == WatermarkStyle.TextOnly ? "TiledText" : "CertificateGrid";
+        }
+
         private void Canvas1_WatermarkChanged(object sender, EventArgs e)
         {
             if (_syncingWatermarkFromCanvas) return;
@@ -1800,6 +2175,7 @@ namespace PicMark
             if (watermark == null) return;
             _syncingWatermarkFromCanvas = true;
             _initializingWatermarkUi = true;
+            _hasSelectedWatermarkTemplate = true;
             _watermarkStyle = watermark.Style;
             _watermarkLayout = watermark.Layout;
             _watermarkLogoPath = watermark.LogoPath ?? string.Empty;
@@ -1807,13 +2183,20 @@ namespace PicMark
             _watermarkLogoFlipVertical = watermark.LogoFlipVertical;
             _watermarkColor = watermark.Color;
             _watermarkColorUserSelected = true;
-            WatermarkLogoScaleSlider.Value = Math.Max(WatermarkLogoScaleSlider.Minimum,
-                Math.Min(WatermarkLogoScaleSlider.Maximum, watermark.LogoScalePercent <= 0 ? 18 : watermark.LogoScalePercent));
-            WatermarkOffsetSlider.Value = Math.Max(WatermarkOffsetSlider.Minimum,
-                Math.Min(WatermarkOffsetSlider.Maximum, watermark.HorizontalOffset));
+            _watermarkFontFamily = string.IsNullOrWhiteSpace(watermark.FontFamilyName) ? "Microsoft YaHei UI" : watermark.FontFamilyName;
+            _watermarkBold = watermark.Bold;
+            WatermarkTextBox.Text = watermark.Text ?? string.Empty;
+            WatermarkOpacitySlider.Value = Math.Max(WatermarkOpacitySlider.Minimum, Math.Min(WatermarkOpacitySlider.Maximum, watermark.Opacity * 100));
+            WatermarkFontSizeSlider.Value = Math.Max(WatermarkFontSizeSlider.Minimum, Math.Min(WatermarkFontSizeSlider.Maximum, watermark.FontSize));
+            WatermarkAngleSlider.Value = Math.Max(WatermarkAngleSlider.Minimum, Math.Min(WatermarkAngleSlider.Maximum, watermark.Angle));
+            WatermarkSpacingSlider.Value = Math.Max(WatermarkSpacingSlider.Minimum, Math.Min(WatermarkSpacingSlider.Maximum, watermark.Spacing));
+            WatermarkLogoScaleSlider.Value = Math.Max(WatermarkLogoScaleSlider.Minimum, Math.Min(WatermarkLogoScaleSlider.Maximum, watermark.LogoScalePercent <= 0 ? 18 : watermark.LogoScalePercent));
+            WatermarkOffsetSlider.Value = Math.Max(WatermarkOffsetSlider.Minimum, Math.Min(WatermarkOffsetSlider.Maximum, watermark.HorizontalOffset));
+            _settings.WatermarkTemplate = GetWatermarkTemplate(watermark);
             _initializingWatermarkUi = false;
             _syncingWatermarkFromCanvas = false;
             UpdateWatermarkControls();
+            QueueWatermarkDefaultsSave();
         }
 
         private void UpdateWatermarkControls()
@@ -1845,6 +2228,7 @@ namespace PicMark
             LogoParametersPanel.Visibility = logo ? Visibility.Visible : Visibility.Collapsed;
             WatermarkTextLabel.Visibility = logo ? Visibility.Collapsed : Visibility.Visible;
             WatermarkTextBox.Visibility = logo ? Visibility.Collapsed : Visibility.Visible;
+            UpdateWatermarkTextHistoryUi();
             WatermarkFontLabel.Visibility = logo ? Visibility.Collapsed : Visibility.Visible;
             WatermarkFontPanel.Visibility = logo ? Visibility.Collapsed : Visibility.Visible;
             WatermarkFontSizeHeader.Visibility = logo ? Visibility.Collapsed : Visibility.Visible;
@@ -2030,9 +2414,15 @@ namespace PicMark
 
         private void EnterBatchWatermarkMode()
         {
+            string initialPath = _currentFilePath;
             _batchWatermarkMode = true;
             _batchWatermarkFiles.Clear();
             _batchWatermarkIndex = -1;
+            if (!string.IsNullOrWhiteSpace(initialPath) && File.Exists(initialPath) && IsSupportedImagePath(initialPath))
+            {
+                _batchWatermarkFiles.Add(initialPath);
+                _batchWatermarkIndex = 0;
+            }
 
             SetEditMode(true, false);
             WatermarkPanel.Visibility = Visibility.Visible;
@@ -2085,14 +2475,20 @@ namespace PicMark
                 var files = Directory.EnumerateFiles(dlg.SelectedPath)
                     .Where(path => Array.IndexOf(SupportedExtensions, Path.GetExtension(path).ToLowerInvariant()) >= 0)
                     .ToArray();
-                AddBatchWatermarkFiles(files, true);
+                AddBatchWatermarkFiles(files, true, true);
             }
         }
 
-        private void AddBatchWatermarkFiles(IEnumerable<string> paths, bool previewFirstNew)
+        private void AddBatchWatermarkFiles(IEnumerable<string> paths, bool previewFirstNew, bool replaceExisting = false)
         {
             if (!_batchWatermarkMode)
                 EnterBatchWatermarkMode();
+
+            if (replaceExisting)
+            {
+                _batchWatermarkFiles.Clear();
+                _batchWatermarkIndex = -1;
+            }
 
             string firstNew = null;
             foreach (string path in paths ?? Enumerable.Empty<string>())
@@ -2201,6 +2597,9 @@ namespace PicMark
                 UpdateBatchWatermarkBar();
             }
 
+            if (succeeded > 0)
+                SaveCurrentWatermarkPresetToHistory();
+
             string summary = failed.Count == 0
                 ? $"批量加水印完成：成功 {succeeded} 张。\n\n{GetBatchWatermarkOutputSummary(outputDirectories)}"
                 : $"批量加水印完成：成功 {succeeded} 张，失败 {failed.Count} 张。\n\n失败文件：\n" +
@@ -2239,7 +2638,7 @@ namespace PicMark
             var root = new Grid { Margin = new Thickness(24) };
             var panel = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(58, 58, 58)),
+                Background = DialogPanelBrush(),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(22, 18, 22, 22),
                 Effect = new System.Windows.Media.Effects.DropShadowEffect
@@ -2247,7 +2646,7 @@ namespace PicMark
                     Color = Colors.Black,
                     BlurRadius = 24,
                     ShadowDepth = 5,
-                    Opacity = 0.5
+                    Opacity = _editMode ? 0.5 : 0.18
                 }
             };
 
@@ -2268,7 +2667,7 @@ namespace PicMark
             titleBar.Children.Add(new TextBlock
             {
                 Text = "批量加水印结果",
-                Foreground = Brushes.White,
+                Foreground = DialogPrimaryTextBrush(),
                 FontSize = 16,
                 FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center
@@ -2279,7 +2678,7 @@ namespace PicMark
             var messageText = new TextBlock
             {
                 Text = message,
-                Foreground = new SolidColorBrush(Color.FromRgb(244, 244, 245)),
+                Foreground = DialogSecondaryTextBrush(),
                 FontSize = 14,
                 LineHeight = 22,
                 TextWrapping = TextWrapping.Wrap,
@@ -2315,7 +2714,7 @@ namespace PicMark
             dialog.ShowDialog();
         }
 
-        private static Button MakeBatchResultButton(string text, bool primary)
+        private Button MakeBatchResultButton(string text, bool primary)
         {
             return new Button
             {
@@ -2326,9 +2725,10 @@ namespace PicMark
                 Padding = new Thickness(14, 0, 14, 0),
                 FontWeight = primary ? FontWeights.Bold : FontWeights.Normal,
                 Cursor = Cursors.Hand,
-                Background = new SolidColorBrush(primary ? Color.FromRgb(82, 101, 255) : Color.FromRgb(70, 70, 70)),
-                BorderBrush = new SolidColorBrush(primary ? Color.FromRgb(82, 101, 255) : Color.FromRgb(86, 86, 86)),
-                Foreground = Brushes.White
+                Background = primary ? (Brush)FindResource("AccentBrush") : DialogSecondaryButtonBrush(),
+                BorderBrush = primary ? (Brush)FindResource("AccentBrush") : DialogBorderBrush(),
+                Foreground = primary ? Brushes.White : DialogPrimaryTextBrush(),
+                BorderThickness = new Thickness(1)
             };
         }
 
@@ -2836,6 +3236,7 @@ namespace PicMark
             }
 
             Clipboard.SetImage(Canvas1.RenderFullResolution());
+            SaveCurrentWatermarkPresetToHistory();
             RecordRecentContextAction("CopyImage");
             UpdateStatus("已复制标注后的图片到剪贴板。");
         }
@@ -3695,7 +4096,8 @@ namespace PicMark
                     SaveBitmapWithOptions(rendered, targetPath, ext, rendered.PixelWidth, rendered.PixelHeight, 95, null);
                     _hasUnsavedChanges = false;
                     UpdateStatus($"已保存（已覆盖原图）：{targetPath}");
-                    return true;
+                    SaveCurrentWatermarkPresetToHistory();
+                return true;
                 }
 
                 var options = new SaveOptionsDialog(rendered, _currentFilePath, ext)
@@ -3708,6 +4110,7 @@ namespace PicMark
                 SaveBitmapWithOptions(rendered, targetPath, options.TargetExtension, options.OutputWidth, options.OutputHeight, options.Quality, options.TargetBytes);
                 _hasUnsavedChanges = false;
                 UpdateStatus($"已保存：{targetPath}（原图未改动）");
+                SaveCurrentWatermarkPresetToHistory();
                 return true;
             }
             catch (Exception ex)
@@ -3910,6 +4313,8 @@ namespace PicMark
                 OptOpenLocation.IsEnabled = hasDiskFile;
             if (OptOpenWith != null)
                 OptOpenWith.IsEnabled = hasDiskFile;
+            if (OptFormatConvert != null)
+                OptFormatConvert.IsEnabled = hasImage;
         }
 
         private void MenuOpenNewImage_Click(object sender, RoutedEventArgs e)
@@ -4006,9 +4411,20 @@ namespace PicMark
         private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
         {
             OptionsPopup.IsOpen = false;
+            await CheckForUpdatesAsync(true);
+        }
+
+        private async void TitleUpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            await CheckForUpdatesAsync(true);
+        }
+
+        private async Task CheckForUpdatesAsync(bool showDialog)
+        {
             OptCheckUpdateText.Text = "正在检查...";
+            UpdateTitleUpdateUi(true);
             UpdateCheckResult result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion());
-            HandleUpdateCheckResult(result, true);
+            HandleUpdateCheckResult(result, showDialog);
         }
 
         private void MenuUpdatePrivacy_Click(object sender, RoutedEventArgs e)
@@ -4031,9 +4447,6 @@ namespace PicMark
                 timer.Stop();
                 _telemetryUrl = _settings.LastTelemetryUrl;
 
-                if (string.Equals(_settings.TelemetryConsent, "Ask", StringComparison.OrdinalIgnoreCase))
-                    ShowTelemetryConsentPrompt();
-
                 UpdateCheckResult result = null;
                 bool needsManifest = OnlineServices.ShouldCheckUpdate(_settings)
                     || (string.Equals(_settings.TelemetryConsent, "Allowed", StringComparison.OrdinalIgnoreCase)
@@ -4042,7 +4455,7 @@ namespace PicMark
                 {
                     result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion());
                     HandleUpdateCheckResult(result, false);
-                    if (_settings.AutoCheckUpdates)
+                    if (_settings.AutoCheckUpdates && result != null && result.Success)
                         OnlineServices.MarkUpdateChecked(_settings);
                 }
 
@@ -4065,6 +4478,7 @@ namespace PicMark
             if (result == null || !result.Success)
             {
                 OptCheckUpdateText.Text = "检查更新";
+                UpdateTitleUpdateUi();
                 if (showDialog)
                     AppDialog.Show(this, "暂时无法检查更新。请稍后再试，或直接到 GitHub Releases 查看。", "检查更新");
                 return;
@@ -4073,6 +4487,7 @@ namespace PicMark
             if (!result.HasUpdate)
             {
                 OptCheckUpdateText.Text = "检查更新";
+                UpdateTitleUpdateUi();
                 if (showDialog)
                     AppDialog.Show(this, $"当前已是最新版本：{GetDisplayVersion()}", "检查更新");
                 return;
@@ -4080,9 +4495,51 @@ namespace PicMark
 
             bool ignored = string.Equals(_settings.IgnoredUpdateVersion, result.LatestVersion, StringComparison.OrdinalIgnoreCase);
             OptCheckUpdateText.Text = ignored ? "检查更新" : "检查更新 · 有新版";
+            UpdateTitleUpdateUi();
 
             if (showDialog)
                 ShowUpdateAvailableDialog(result);
+        }
+
+        private void UpdateTitleUpdateUi(bool isChecking = false)
+        {
+            if (TitleVersionText != null)
+                TitleVersionText.Text = "v" + GetDisplayVersion();
+            if (TitleUpdateButton == null) return;
+
+            Color buttonBackground = _editMode ? Color.FromRgb(0x32, 0x36, 0x3B) : Color.FromRgb(0xFF, 0xFF, 0xFF);
+            Color buttonBorder = _editMode ? Color.FromRgb(0x4F, 0x56, 0x5E) : Color.FromRgb(0xD7, 0xDE, 0xE5);
+            Color neutralForeground = _editMode ? Color.FromRgb(0xE7, 0xEB, 0xEF) : Color.FromRgb(0x44, 0x57, 0x6A);
+            if (isChecking)
+            {
+                SetTitleUpdateButtonAppearance("正在检查", "正在检查更新", false,
+                    buttonBackground, buttonBorder, neutralForeground);
+                return;
+            }
+
+            bool hasVisibleUpdate = _lastUpdateCheck != null && _lastUpdateCheck.Success && _lastUpdateCheck.HasUpdate
+                && !string.Equals(_settings.IgnoredUpdateVersion, _lastUpdateCheck.LatestVersion, StringComparison.OrdinalIgnoreCase);
+            if (hasVisibleUpdate)
+            {
+                SetTitleUpdateButtonAppearance("有新版本", "发现 v" + _lastUpdateCheck.LatestVersion + "，点击查看更新", true,
+                    _editMode ? Color.FromRgb(0x3B, 0x43, 0x4D) : Color.FromRgb(0xF2, 0xF6, 0xFF),
+                    _editMode ? Color.FromRgb(0x5E, 0x69, 0x76) : Color.FromRgb(0xC8, 0xD6, 0xF2),
+                    _editMode ? Color.FromRgb(0xE5, 0xEC, 0xF7) : Color.FromRgb(0x3E, 0x62, 0xA8));
+                return;
+            }
+
+            SetTitleUpdateButtonAppearance("检查更新", "检查是否有新版本", true,
+                buttonBackground, buttonBorder, neutralForeground);
+        }
+
+        private void SetTitleUpdateButtonAppearance(string content, string toolTip, bool isEnabled, Color background, Color border, Color foreground)
+        {
+            TitleUpdateButton.Content = content;
+            TitleUpdateButton.ToolTip = toolTip;
+            TitleUpdateButton.IsEnabled = isEnabled;
+            TitleUpdateButton.Background = new SolidColorBrush(background);
+            TitleUpdateButton.BorderBrush = new SolidColorBrush(border);
+            TitleUpdateButton.Foreground = new SolidColorBrush(foreground);
         }
 
         private void ShowUpdateAvailableDialog(UpdateCheckResult result)
@@ -4093,7 +4550,7 @@ namespace PicMark
             root.Children.Add(new TextBlock
             {
                 Text = "更新不会自动安装。你可以打开下载页自行选择安装版或免安装版。",
-                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                Foreground = DialogSecondaryTextBrush(),
                 TextWrapping = TextWrapping.Wrap,
                 LineHeight = 22,
                 Margin = new Thickness(0, 0, 0, 12)
@@ -4119,6 +4576,7 @@ namespace PicMark
                 _settings.IgnoredUpdateVersion = result.LatestVersion ?? string.Empty;
                 _settings.Save();
                 OptCheckUpdateText.Text = "检查更新";
+                UpdateTitleUpdateUi();
                 dialog.Close();
             };
             laterButton.Click += (s, e) => dialog.Close();
@@ -4132,44 +4590,6 @@ namespace PicMark
             dialog.ShowDialog();
         }
 
-        private void ShowTelemetryConsentPrompt()
-        {
-            var dialog = CreateSimpleDialog("帮助改进见微 PicMark", 520, 330);
-            var root = new StackPanel { Margin = new Thickness(18) };
-            root.Children.Add(MakeDialogTitle("是否允许匿名使用统计？"));
-            root.Children.Add(new TextBlock
-            {
-                Text = "允许后，PicMark 每天最多发送一次匿名启动统计，用来了解版本使用情况、系统兼容性和低分辨率屏幕占比。\n\n不会上传图片、文件名、文件路径、编辑内容、Windows 用户名或电脑名。你可以随时在“更新与隐私”里关闭。",
-                Foreground = (Brush)FindResource("TextSecondaryBrush"),
-                TextWrapping = TextWrapping.Wrap,
-                LineHeight = 22,
-                Margin = new Thickness(0, 0, 0, 18)
-            });
-
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-            var denyButton = new Button { Content = "不允许", Style = (Style)FindResource("ToolButton"), MinWidth = 78, Margin = new Thickness(0, 0, 8, 0) };
-            var allowButton = new Button { Content = "允许匿名统计", Style = (Style)FindResource("PrimaryButton"), MinWidth = 112 };
-            buttons.Children.Add(denyButton);
-            buttons.Children.Add(allowButton);
-            root.Children.Add(buttons);
-
-            denyButton.Click += (s, e) =>
-            {
-                _settings.TelemetryConsent = "Denied";
-                _settings.Save();
-                dialog.Close();
-            };
-            allowButton.Click += async (s, e) =>
-            {
-                _settings.TelemetryConsent = "Allowed";
-                _settings.Save();
-                await OnlineServices.SendDailyTelemetryAsync(_settings, GetDisplayVersion(), _telemetryUrl);
-                dialog.Close();
-            };
-
-            dialog.Content = root;
-            dialog.ShowDialog();
-        }
 
         private void ShowUpdatePrivacyDialog()
         {
@@ -4181,22 +4601,22 @@ namespace PicMark
             {
                 Content = "自动检查更新（启动后延迟检查，最多每 3 天一次）",
                 IsChecked = _settings.AutoCheckUpdates,
-                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                Foreground = DialogPrimaryTextBrush(),
                 Margin = new Thickness(0, 8, 0, 10)
             };
             var telemetry = new CheckBox
             {
-                Content = "发送匿名使用统计（每天最多一次，可随时关闭）",
+                Content = "发送匿名启动与兼容性信息（每天最多一次，可随时关闭）",
                 IsChecked = string.Equals(_settings.TelemetryConsent, "Allowed", StringComparison.OrdinalIgnoreCase),
-                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                Foreground = DialogPrimaryTextBrush(),
                 Margin = new Thickness(0, 0, 0, 12)
             };
             root.Children.Add(autoUpdate);
             root.Children.Add(telemetry);
             root.Children.Add(new TextBlock
             {
-                Text = "匿名统计只包含版本号、系统版本、安装版/免安装版、分辨率区间、是否低分辨率屏幕、随机匿名 ID 和日期。\n\n不会上传图片、文件名、文件路径、编辑内容、Windows 用户名或电脑名。没有网络或服务器不可用时会静默失败。",
-                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                Text = "仅包含软件版本、安装版/免安装版、Windows 版本、屏幕分辨率区间、随机匿名 ID 和日期。\n\n不会上传图片、文件名、文件路径、编辑内容、Windows 用户名或电脑名。没有网络或服务器不可用时会静默失败。",
+                Foreground = DialogSecondaryTextBrush(),
                 TextWrapping = TextWrapping.Wrap,
                 LineHeight = 22,
                 Margin = new Thickness(0, 0, 0, 18)
@@ -4208,8 +4628,8 @@ namespace PicMark
             root.Children.Add(MakeDialogText("更新状态：" + current));
 
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
-            var checkButton = new Button { Content = "立即检查", Style = (Style)FindResource("ToolButton"), MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) };
-            var privacyButton = new Button { Content = "隐私说明", Style = (Style)FindResource("ToolButton"), MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) };
+            var checkButton = new Button { Content = "立即检查", Style = (Style)FindResource("ToolButton"), MinWidth = 84, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(10, 4, 10, 4), Background = DialogSecondaryButtonBrush(), BorderBrush = DialogBorderBrush(), BorderThickness = new Thickness(1), Foreground = DialogPrimaryTextBrush() };
+            var privacyButton = new Button { Content = "隐私说明", Style = (Style)FindResource("ToolButton"), MinWidth = 84, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(10, 4, 10, 4), Background = DialogSecondaryButtonBrush(), BorderBrush = DialogBorderBrush(), BorderThickness = new Thickness(1), Foreground = DialogPrimaryTextBrush() };
             var saveButton = new Button { Content = "保存", Style = (Style)FindResource("PrimaryButton"), MinWidth = 72 };
             buttons.Children.Add(checkButton);
             buttons.Children.Add(privacyButton);
@@ -4236,6 +4656,7 @@ namespace PicMark
 
         private Window CreateSimpleDialog(string title, double width, double height)
         {
+            bool isLight = !_editMode;
             return new Window
             {
                 Owner = this,
@@ -4245,9 +4666,31 @@ namespace PicMark
                 ResizeMode = ResizeMode.NoResize,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner,
                 Background = (Brush)FindResource("PanelBrush"),
-                FontFamily = UiFonts.Family
+                Foreground = DialogPrimaryTextBrush(),
+                FontFamily = UiFonts.Family,
+                BorderBrush = isLight ? BrushFromRgb(0xC6, 0xD5, 0xE1) : BrushFromRgb(0x4C, 0x4C, 0x4C)
             };
         }
+
+        private SolidColorBrush DialogPanelBrush() => _editMode
+            ? BrushFromRgb(0x3A, 0x3A, 0x3A)
+            : BrushFromRgb(0xF8, 0xFA, 0xFC);
+
+        private SolidColorBrush DialogBorderBrush() => _editMode
+            ? BrushFromRgb(0x4C, 0x4C, 0x4C)
+            : BrushFromRgb(0xC6, 0xD5, 0xE1);
+
+        private SolidColorBrush DialogPrimaryTextBrush() => _editMode
+            ? BrushFromRgb(0xF4, 0xF4, 0xF5)
+            : BrushFromRgb(0x1F, 0x2A, 0x37);
+
+        private SolidColorBrush DialogSecondaryTextBrush() => _editMode
+            ? BrushFromRgb(0xDA, 0xDE, 0xE6)
+            : BrushFromRgb(0x4F, 0x5D, 0x6C);
+
+        private SolidColorBrush DialogSecondaryButtonBrush() => _editMode
+            ? BrushFromRgb(0x46, 0x46, 0x46)
+            : BrushFromRgb(0xF7, 0xFA, 0xFC);
 
         private TextBlock MakeDialogTitle(string text)
         {
@@ -4256,7 +4699,7 @@ namespace PicMark
                 Text = text,
                 FontSize = 18,
                 FontWeight = FontWeights.Bold,
-                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                Foreground = DialogPrimaryTextBrush(),
                 Margin = new Thickness(0, 0, 0, 14)
             };
         }
@@ -4266,7 +4709,7 @@ namespace PicMark
             return new TextBlock
             {
                 Text = text,
-                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                Foreground = DialogSecondaryTextBrush(),
                 TextWrapping = TextWrapping.Wrap,
                 LineHeight = 22,
                 Margin = new Thickness(0, 2, 0, 4)
@@ -4308,7 +4751,7 @@ namespace PicMark
             var root = new Grid { Margin = new Thickness(24) };
             var panel = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(58, 58, 58)),
+                Background = DialogPanelBrush(),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(22, 18, 22, 22),
                 Effect = new System.Windows.Media.Effects.DropShadowEffect
@@ -4316,7 +4759,7 @@ namespace PicMark
                     Color = Colors.Black,
                     BlurRadius = 24,
                     ShadowDepth = 5,
-                    Opacity = 0.5
+                    Opacity = _editMode ? 0.5 : 0.18
                 }
             };
 
@@ -4338,7 +4781,7 @@ namespace PicMark
             titleBar.Children.Add(new TextBlock
             {
                 Text = "关于 PicMark",
-                Foreground = Brushes.White,
+                Foreground = DialogPrimaryTextBrush(),
                 FontSize = 16,
                 FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center
@@ -4352,7 +4795,7 @@ namespace PicMark
                 Width = 28,
                 Height = 28,
                 Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(218, 222, 230)),
+                Foreground = DialogSecondaryTextBrush(),
                 BorderThickness = new Thickness(0),
                 FontSize = 18,
                 Cursor = Cursors.Hand
@@ -4366,7 +4809,7 @@ namespace PicMark
             content.Children.Add(new TextBlock
             {
                 Text = "见微 PicMark",
-                Foreground = Brushes.White,
+                Foreground = DialogPrimaryTextBrush(),
                 FontSize = 20,
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(0, 0, 0, 8)
@@ -4374,7 +4817,7 @@ namespace PicMark
             content.Children.Add(new TextBlock
             {
                 Text = "开源、本地优先的轻量图片查看与标注工具。",
-                Foreground = new SolidColorBrush(Color.FromRgb(244, 244, 245)),
+                Foreground = DialogSecondaryTextBrush(),
                 FontSize = 14,
                 LineHeight = 22,
                 TextWrapping = TextWrapping.Wrap,
@@ -4387,7 +4830,7 @@ namespace PicMark
             var link = new Hyperlink(new Run("https://github.com/Tsang12140/picmark"))
             {
                 NavigateUri = new Uri("https://github.com/Tsang12140/picmark"),
-                Foreground = new SolidColorBrush(Color.FromRgb(132, 160, 255))
+                Foreground = _editMode ? BrushFromRgb(132, 160, 255) : BrushFromRgb(60, 92, 160)
             };
             link.RequestNavigate += OpenAboutLink;
             projectLine.Inlines.Add(link);
@@ -4397,7 +4840,7 @@ namespace PicMark
             content.Children.Add(new TextBlock
             {
                 Text = "PicMark 离线运行，不上传图片、文件名、文件路径或编辑内容；匿名统计需用户允许，且可在“更新与隐私”中关闭。\n默认保留原图，导出时才写入成品文件。\nCopyright © 2026 Tsang12140",
-                Foreground = new SolidColorBrush(Color.FromRgb(218, 222, 230)),
+                Foreground = DialogSecondaryTextBrush(),
                 FontSize = 14,
                 LineHeight = 22,
                 TextWrapping = TextWrapping.Wrap,
@@ -4429,12 +4872,12 @@ namespace PicMark
             dialog.ShowDialog();
         }
 
-        private static TextBlock MakeAboutText(string text)
+        private TextBlock MakeAboutText(string text)
         {
             return new TextBlock
             {
                 Text = text,
-                Foreground = new SolidColorBrush(Color.FromRgb(244, 244, 245)),
+                Foreground = DialogSecondaryTextBrush(),
                 FontSize = 14,
                 LineHeight = 22,
                 TextWrapping = TextWrapping.Wrap,
@@ -4477,8 +4920,8 @@ namespace PicMark
                 Height = 640,
                 MinWidth = 500,
                 MinHeight = 520,
-                Background = new SolidColorBrush(Color.FromRgb(0xF2, 0xF6, 0xF8)),
-                Foreground = new SolidColorBrush(Color.FromRgb(0x23, 0x2C, 0x38))
+                Background = DialogPanelBrush(),
+                Foreground = DialogPrimaryTextBrush()
             };
 
             var root = new DockPanel { Margin = new Thickness(18) };
@@ -4492,7 +4935,7 @@ namespace PicMark
             header.Children.Add(new TextBlock
             {
                 Text = "高频操作放在最前面；文字输入时不会触发查看器快捷键。",
-                Foreground = new SolidColorBrush(Color.FromRgb(0x67, 0x74, 0x85)),
+                Foreground = DialogSecondaryTextBrush(),
                 Margin = new Thickness(0, 5, 0, 0),
                 TextWrapping = TextWrapping.Wrap
             });
@@ -4507,7 +4950,7 @@ namespace PicMark
                 HorizontalAlignment = HorizontalAlignment.Right,
                 Margin = new Thickness(0, 12, 0, 0),
                 Background = new SolidColorBrush(Color.FromRgb(0x52, 0x65, 0xFF)),
-                Foreground = Brushes.White,
+                Foreground = DialogPrimaryTextBrush(),
                 BorderBrush = Brushes.Transparent,
                 FontWeight = FontWeights.Bold
             };
@@ -4556,12 +4999,12 @@ namespace PicMark
             dialog.ShowDialog();
         }
 
-        private static void AddShortcutSection(StackPanel root, string title, params Tuple<string, string>[] rows)
+        private void AddShortcutSection(StackPanel root, string title, params Tuple<string, string>[] rows)
         {
             var card = new Border
             {
-                Background = Brushes.White,
-                BorderBrush = new SolidColorBrush(Color.FromRgb(0xD4, 0xE0, 0xEA)),
+                Background = _editMode ? BrushFromRgb(0x32, 0x32, 0x32) : Brushes.White,
+                BorderBrush = DialogBorderBrush(),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(14, 12, 14, 10),
@@ -4574,7 +5017,7 @@ namespace PicMark
                 Text = title,
                 FontSize = 15,
                 FontWeight = FontWeights.SemiBold,
-                Foreground = new SolidColorBrush(Color.FromRgb(0x1F, 0x2A, 0x37)),
+                Foreground = DialogPrimaryTextBrush(),
                 Margin = new Thickness(0, 0, 0, 8)
             });
 
@@ -4586,8 +5029,8 @@ namespace PicMark
 
                 var keyBadge = new Border
                 {
-                    Background = new SolidColorBrush(Color.FromRgb(0xEC, 0xF2, 0xF7)),
-                    BorderBrush = new SolidColorBrush(Color.FromRgb(0xC8, 0xD6, 0xE2)),
+                    Background = _editMode ? BrushFromRgb(0x3F, 0x3F, 0x3F) : BrushFromRgb(0xEC, 0xF2, 0xF7),
+                    BorderBrush = DialogBorderBrush(),
                     BorderThickness = new Thickness(1),
                     CornerRadius = new CornerRadius(6),
                     Padding = new Thickness(8, 4, 8, 4),
@@ -4598,7 +5041,7 @@ namespace PicMark
                 {
                     Text = row.Item1,
                     FontWeight = FontWeights.Bold,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x2C, 0x3A, 0x4C))
+                    Foreground = DialogPrimaryTextBrush()
                 };
                 Grid.SetColumn(keyBadge, 0);
                 grid.Children.Add(keyBadge);
@@ -4607,7 +5050,7 @@ namespace PicMark
                 {
                     Text = row.Item2,
                     VerticalAlignment = VerticalAlignment.Center,
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x3B, 0x47, 0x56)),
+                    Foreground = DialogSecondaryTextBrush(),
                     TextWrapping = TextWrapping.Wrap
                 };
                 Grid.SetColumn(action, 1);
@@ -4679,13 +5122,13 @@ namespace PicMark
                 Text = "历史缓存",
                 FontSize = 18,
                 FontWeight = FontWeights.Bold,
-                Foreground = (Brush)FindResource("TextPrimaryBrush"),
+                Foreground = DialogPrimaryTextBrush(),
                 Margin = new Thickness(0, 0, 0, 14)
             });
             root.Children.Add(new TextBlock
             {
                 Text = $"当前约 {usedMb:0.#} MB / 上限 {_settings.HistoryCacheMb} MB",
-                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                Foreground = DialogSecondaryTextBrush(),
                 Margin = new Thickness(0, 0, 0, 8)
             });
 
@@ -4700,7 +5143,7 @@ namespace PicMark
             root.Children.Add(new TextBlock
             {
                 Text = $"常用 Logo 素材上限（当前 {_settings.WatermarkLogoAssets.Count} / {_settings.WatermarkAssetLimit}）",
-                Foreground = (Brush)FindResource("TextSecondaryBrush"),
+                Foreground = DialogSecondaryTextBrush(),
                 Margin = new Thickness(0, 2, 0, 8)
             });
 
@@ -4853,45 +5296,43 @@ namespace PicMark
             double zoomWidth = BottomZoomBar.ActualWidth;
             if (overlayWidth <= 0 || zoomWidth <= 0) return;
 
-            const double centerOuterMargin = 24; // BottomZoomBar has 12px margin on both sides.
-            const double sideSafetyGap = 18;
-            double sideWidth = Math.Max(0, (overlayWidth - zoomWidth - centerOuterMargin) / 2.0 - sideSafetyGap);
+            const double centerOuterMargin = 24;
+            const double rightInset = 12;
+            double sideWidth = Math.Max(0, (overlayWidth - zoomWidth - centerOuterMargin) / 2.0);
+            double rightAvailable = Math.Max(0, sideWidth - rightInset);
+
             if (RightBottomBadges != null)
-            {
-                RightBottomBadges.MaxWidth = sideWidth;
-                RightBottomBadges.Margin = sideWidth > 0 ? new Thickness(12, 0, 0, 0) : new Thickness(0);
-            }
+                RightBottomBadges.MaxWidth = rightAvailable;
 
             if (StatusBadge != null)
             {
-                StatusBadge.MaxWidth = Math.Max(86, sideWidth);
-                StatusText.MaxWidth = Math.Max(58, sideWidth - 20);
+                StatusBadge.MaxWidth = sideWidth;
+                StatusText.MaxWidth = Math.Max(0, sideWidth - 22);
             }
 
-            if (Canvas1.Image == null || sideWidth < 190)
+            if (Canvas1.Image == null || rightAvailable < 150)
             {
                 CurrentFileBadge.Visibility = Visibility.Collapsed;
                 ImageInfoBadge.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            ImageInfoBadge.Visibility = Visibility.Visible;
-            bool showFileBadge = sideWidth >= 430;
-            CurrentFileBadge.Visibility = showFileBadge ? Visibility.Visible : Visibility.Collapsed;
-
+            bool showFileBadge = rightAvailable >= 365;
             double infoBadgeWidth = showFileBadge
-                ? Math.Min(210, Math.Max(148, sideWidth * 0.48))
-                : Math.Min(250, Math.Max(132, sideWidth - 12));
+                ? Math.Min(210, Math.Max(140, rightAvailable * 0.50))
+                : Math.Min(260, rightAvailable);
             double fileBadgeWidth = showFileBadge
-                ? Math.Min(230, Math.Max(104, sideWidth - infoBadgeWidth - 20))
+                ? Math.Max(100, Math.Min(230, rightAvailable - infoBadgeWidth - 6))
                 : 0;
 
+            ImageInfoBadge.Visibility = Visibility.Visible;
             ImageInfoBadge.MaxWidth = infoBadgeWidth;
-            ImageInfoText.MaxWidth = Math.Max(90, infoBadgeWidth - 18);
+            ImageInfoText.MaxWidth = Math.Max(80, infoBadgeWidth - 18);
+            CurrentFileBadge.Visibility = showFileBadge ? Visibility.Visible : Visibility.Collapsed;
             if (showFileBadge)
             {
                 CurrentFileBadge.MaxWidth = fileBadgeWidth;
-                CurrentFileText.MaxWidth = Math.Max(62, fileBadgeWidth - 20);
+                CurrentFileText.MaxWidth = Math.Max(62, fileBadgeWidth - 22);
             }
         }
 
@@ -4906,42 +5347,272 @@ namespace PicMark
             UpdateRecentFilesUi();
         }
 
-        private void UpdateRecentFilesUi()
+        private void UpdateRecentFilesUi(bool refreshThumbnails = true)
         {
-            if (RecentFilesHost == null) return;
+            if (RecentFilesHost == null || EmptyState == null) return;
+
+            int visibleLimit = GetRecentFilesVisibleLimit();
+            int columns = visibleLimit == 8 ? 4 : 3;
+            double panelWidth = GetRecentFilesPanelWidth(columns);
+            double cardsWidth = panelWidth - 56;
+            double cardWidth = Math.Floor(cardsWidth / columns) - 6;
+            double imageHeight = GetRecentFilesImageHeight(cardWidth);
+            double panelHeight = GetRecentFilesPanelHeight(imageHeight);
+            bool layoutUnchanged = _recentFilesVisibleLimit == visibleLimit
+                && Math.Abs(_recentFilesListWidth - cardsWidth) < 1;
+            if (!refreshThumbnails && layoutUnchanged && RecentFilesHost.Children.Count > 0) return;
+
+            _recentFilesVisibleLimit = visibleLimit;
+            _recentFilesListWidth = cardsWidth;
+            EmptyState.Width = panelWidth;
+            EmptyState.Height = panelHeight;
+            RecentFilesHost.Width = cardsWidth;
+            RecentFilesHost.HorizontalAlignment = HorizontalAlignment.Center;
             RecentFilesHost.Children.Clear();
-            var existing = _settings.RecentFiles.Where(File.Exists).Take(5).ToList();
-            if (existing.Count == 0) return;
+
+            // Keep one card permanently for opening an image.  The remaining
+            // positions are recent files: 7 on normal windows, 5 on compact ones.
+            int recentCapacity = Math.Max(0, visibleLimit - 1);
+            var existing = _settings.RecentFiles.Where(File.Exists).Take(recentCapacity).ToList();
 
             RecentFilesHost.Children.Add(new TextBlock
             {
                 Text = "最近打开",
                 Foreground = new SolidColorBrush(Color.FromRgb(0x4F, 0x5D, 0x6C)),
                 FontSize = 12,
-                Margin = new Thickness(0, 0, 0, 6)
+                Margin = new Thickness(0, 0, 0, 7)
             });
+
+            var cards = new System.Windows.Controls.Primitives.UniformGrid
+            {
+                Columns = columns,
+                Width = cardsWidth,
+                HorizontalAlignment = HorizontalAlignment.Left
+            };
 
             foreach (string path in existing)
             {
+                string formatLabel = Path.GetExtension(path).TrimStart('.').ToUpperInvariant();
+                if (formatLabel == "JPEG") formatLabel = "JPG";
+                if (string.IsNullOrWhiteSpace(formatLabel)) formatLabel = "IMG";
+                var thumbnail = new Image
+                {
+                    Width = cardWidth,
+                    Height = imageHeight,
+                    Stretch = Stretch.UniformToFill,
+                    ClipToBounds = true,
+                    SnapsToDevicePixels = true
+                };
+                BitmapSource preview = LoadRecentFileThumbnail(path, (int)Math.Ceiling(cardWidth * 2));
+                if (preview != null)
+                    thumbnail.Source = preview;
+
+                var previewContent = new Grid { ClipToBounds = true };
+                previewContent.Children.Add(thumbnail);
+                previewContent.Children.Add(new Border
+                {
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Bottom,
+                    Margin = new Thickness(0, 0, 7, 7),
+                    Padding = new Thickness(7, 3, 7, 3),
+                    Background = new SolidColorBrush(Color.FromArgb(232, 255, 239, 190)),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(210, 237, 183, 76)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(8),
+                    Child = new TextBlock
+                    {
+                        Text = formatLabel,
+                        Foreground = new SolidColorBrush(Color.FromRgb(0x8B, 0x57, 0x00)),
+                        FontSize = 9.5,
+                        FontWeight = FontWeights.SemiBold,
+                        VerticalAlignment = VerticalAlignment.Center
+                    }
+                });
+
+                var previewFrame = new Border
+                {
+                    Height = imageHeight + 2,
+                    Background = Brushes.White,
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(0xD5, 0xE0, 0xE8)),
+                    BorderThickness = new Thickness(1),
+                    CornerRadius = new CornerRadius(3, 3, 0, 0),
+                    ClipToBounds = true,
+                    Child = previewContent
+                };
+
+                var name = new TextBlock
+                {
+                    Text = Path.GetFileName(path),
+                    Foreground = DialogPrimaryTextBrush(),
+                    FontSize = 12.5,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    TextWrapping = TextWrapping.NoWrap,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    Width = Math.Max(24, cardWidth - 16),
+                    Margin = new Thickness(8, 0, 8, 0)
+                };
+
+                var content = new Grid { ClipToBounds = true };
+                content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(imageHeight) });
+                content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(34) });
+                content.Children.Add(previewFrame);
+                Grid.SetRow(name, 1);
+                content.Children.Add(name);
+
                 var button = new Button
                 {
-                    Content = Path.GetFileName(path),
+                    Content = content,
                     ToolTip = path,
                     Tag = path,
-                    Height = 28,
-                    Margin = new Thickness(0, 3, 0, 0),
-                    HorizontalContentAlignment = HorizontalAlignment.Left,
-                    Padding = new Thickness(9, 0, 9, 0),
+                    Width = cardWidth,
+                    Height = imageHeight + 34,
+                    Margin = new Thickness(0, 0, 6, 6),
+                    Padding = new Thickness(0),
+                    HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                    VerticalContentAlignment = VerticalAlignment.Stretch,
                     Background = new SolidColorBrush(Color.FromRgb(0xF7, 0xFA, 0xFB)),
-                    Foreground = new SolidColorBrush(Color.FromRgb(0x1F, 0x2A, 0x37)),
                     BorderBrush = new SolidColorBrush(Color.FromRgb(0xB9, 0xCB, 0xD8)),
                     BorderThickness = new Thickness(1)
                 };
+                System.Windows.Automation.AutomationProperties.SetName(button, Path.GetFileName(path));
                 button.Click += RecentFile_Click;
-                RecentFilesHost.Children.Add(button);
+                cards.Children.Add(button);
+            }
+
+            var openCardContent = new Grid
+            {
+                Width = cardWidth,
+                Height = imageHeight + 34,
+                ClipToBounds = true
+            };
+            openCardContent.Children.Add(new System.Windows.Shapes.Rectangle
+            {
+                Stroke = new SolidColorBrush(Color.FromRgb(0x9C, 0xB2, 0xC3)),
+                StrokeThickness = 1.5,
+                StrokeDashArray = new DoubleCollection { 4, 3 },
+                RadiusX = 3,
+                RadiusY = 3
+            });
+            var openCardLabel = new StackPanel
+            {
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            openCardLabel.Children.Add(new TextBlock
+            {
+                Text = "+",
+                Foreground = new SolidColorBrush(Color.FromRgb(0x63, 0x70, 0x83)),
+                FontSize = 28,
+                FontWeight = FontWeights.Light,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            openCardLabel.Children.Add(new TextBlock
+            {
+                Text = "打开图片",
+                Foreground = new SolidColorBrush(Color.FromRgb(0x63, 0x70, 0x83)),
+                FontSize = 12,
+                Margin = new Thickness(0, 1, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            openCardContent.Children.Add(openCardLabel);
+            var openCard = new Button
+            {
+                Content = openCardContent,
+                ToolTip = "打开图片",
+                Width = cardWidth,
+                Height = imageHeight + 34,
+                Margin = new Thickness(0, 0, 6, 6),
+                Padding = new Thickness(0),
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                VerticalContentAlignment = VerticalAlignment.Stretch
+            };
+            System.Windows.Automation.AutomationProperties.SetName(openCard, "打开图片");
+            openCard.Click += BtnOpen_Click;
+            cards.Children.Add(openCard);
+
+            RecentFilesHost.Children.Add(cards);
+        }
+
+        private int GetRecentFilesVisibleLimit()
+        {
+            double stageWidth = ImageStage?.ActualWidth > 0 ? ImageStage.ActualWidth : ActualWidth;
+            double stageHeight = ImageStage?.ActualHeight > 0 ? ImageStage.ActualHeight : ActualHeight;
+            // Smaller windows keep two rows but reduce from four columns to three.
+            return stageWidth < 880 || stageHeight < 520 ? 6 : 8;
+        }
+
+        private double GetRecentFilesPanelWidth(int columns)
+        {
+            double stageWidth = ImageStage?.ActualWidth > 0 ? ImageStage.ActualWidth : ActualWidth;
+            if (stageWidth <= 0) stageWidth = 760;
+            double preferredWidth = columns == 4 ? 600 : 470;
+            return Math.Max(340, Math.Min(preferredWidth, stageWidth - 64));
+        }
+
+        private double GetRecentFilesImageHeight(double cardWidth)
+        {
+            double stageHeight = ImageStage?.ActualHeight > 0 ? ImageStage.ActualHeight : ActualHeight - 100;
+            // Leave room for the heading, description, and two title rows.  On a
+            // shorter window thumbnails shrink before the second row can overflow.
+            double maximumImageHeight = Math.Max(42, (stageHeight - 194) / 2 - 40);
+            return Math.Floor(Math.Max(42, Math.Min(Math.Min(cardWidth * 0.66, 88), maximumImageHeight)));
+        }
+
+        private double GetRecentFilesPanelHeight(double imageHeight)
+        {
+            double stageHeight = ImageStage?.ActualHeight > 0 ? ImageStage.ActualHeight : ActualHeight - 100;
+            double contentHeight = 190 + 2 * (imageHeight + 40);
+            return Math.Min(Math.Max(292, stageHeight - 24), contentHeight);
+        }
+
+        private BitmapSource LoadRecentFileThumbnail(string path, int decodePixelWidth)
+        {
+            string cacheKey = path + "|" + decodePixelWidth.ToString(CultureInfo.InvariantCulture);
+            if (_recentFileThumbnailCache.TryGetValue(cacheKey, out BitmapSource cached))
+                return cached;
+
+            try
+            {
+                BitmapSource thumbnail;
+                if (IsProjectPath(path))
+                    thumbnail = ProjectStore.LoadPreview(path, decodePixelWidth);
+                else if (string.Equals(Path.GetExtension(path), ".webp", StringComparison.OrdinalIgnoreCase))
+                    thumbnail = CreateThumbnail(WebpDecoder.Load(path), decodePixelWidth);
+                else
+                {
+                    var image = new BitmapImage();
+                    image.BeginInit();
+                    image.CacheOption = BitmapCacheOption.OnLoad;
+                    image.DecodePixelWidth = decodePixelWidth;
+                    image.UriSource = new Uri(path, UriKind.Absolute);
+                    image.EndInit();
+                    image.Freeze();
+                    thumbnail = image;
+                }
+
+                if (thumbnail != null)
+                    _recentFileThumbnailCache[cacheKey] = thumbnail;
+                return thumbnail;
+            }
+            catch
+            {
+                return null;
             }
         }
 
+        private static BitmapSource CreateThumbnail(BitmapSource source, int maximumSize)
+        {
+            if (source == null || source.PixelWidth <= maximumSize && source.PixelHeight <= maximumSize)
+                return source;
+
+            double scale = Math.Min((double)maximumSize / source.PixelWidth, (double)maximumSize / source.PixelHeight);
+            var thumbnail = new TransformedBitmap(source, new ScaleTransform(scale, scale));
+            thumbnail.Freeze();
+            return thumbnail;
+        }
         private void RecentFile_Click(object sender, RoutedEventArgs e)
         {
             if (!(sender is Button button) || !(button.Tag is string path)) return;

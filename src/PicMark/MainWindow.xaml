@@ -11,17 +11,19 @@
         WindowStartupLocation="CenterScreen"
         AllowDrop="True" Drop="Window_Drop"
         FontFamily="{StaticResource AppUiFontFamily}"
-        Background="#FF242424">
+        Background="#FFF4F6F8"
+        ToolTipService.InitialShowDelay="600"
+        ToolTipService.ShowDuration="8000">
     <shell:WindowChrome.WindowChrome>
         <shell:WindowChrome
             GlassFrameThickness="0"
-            CornerRadius="8"
+            CornerRadius="10"
             CaptionHeight="0"
             ResizeBorderThickness="4"
             UseAeroCaptionButtons="False"/>
     </shell:WindowChrome.WindowChrome>
     <Window.Resources>
-        <SolidColorBrush x:Key="AccentBrush" Color="#FF5265FF"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#FF5B5CEB"/>
         <SolidColorBrush x:Key="ActiveBrush" Color="#FF5265FF"/>
         <SolidColorBrush x:Key="ActiveBorderBrush" Color="#FFAEB7FF"/>
         <SolidColorBrush x:Key="TextPrimaryBrush" Color="#FFF4F4F5"/>
@@ -32,15 +34,73 @@
         <SolidColorBrush x:Key="BorderBrush1" Color="#FF464646"/>
         <SolidColorBrush x:Key="HoverBrush" Color="#FF3F3F3F"/>
         <SolidColorBrush x:Key="PressedBrush" Color="#FF4A4A4A"/>
+        <SolidColorBrush x:Key="TitleBarControlHoverBrush" Color="#FF3F3F3F"/>
+        <SolidColorBrush x:Key="TitleBarControlPressedBrush" Color="#FF4A4A4A"/>
+        <SolidColorBrush x:Key="TitleUpdateHoverBrush" Color="#FF303A48"/>
+        <SolidColorBrush x:Key="TitleUpdatePressedBrush" Color="#FF252D38"/>
         <SolidColorBrush x:Key="CloseHoverBrush" Color="#FFE81123"/>
         <SolidColorBrush x:Key="ClosePressedBrush" Color="#FFF1707A"/>
 
+        <Style TargetType="{x:Type ToolTip}">
+            <Setter Property="OverridesDefaultStyle" Value="True"/>
+            <Setter Property="HasDropShadow" Value="False"/>
+            <Setter Property="Background" Value="#FF1F2937"/>
+            <Setter Property="Foreground" Value="#FFF8FAFC"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="MaxWidth" Value="360"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToolTip}">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="#FF334155" BorderThickness="1"
+                                CornerRadius="6" Padding="8,5">
+                            <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"
+                                              TextElement.FontSize="{TemplateBinding FontSize}"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="RecentImageCard" TargetType="Button">
+            <Setter Property="Background" Value="#FFFFFFFF"/>
+            <Setter Property="Foreground" Value="#FF243146"/>
+            <Setter Property="BorderBrush" Value="#00000000"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Focusable" Value="False"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Card" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="10" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="#FFBAC6F7"/>
+                                <Setter TargetName="Card" Property="Background" Value="#FFFCFCFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Card" Property="Background" Value="#FFF2F4FF"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="RecentOpenCard" TargetType="Button" BasedOn="{StaticResource RecentImageCard}">
+            <Setter Property="Background" Value="#FFF9FAFD"/>
+            <Setter Property="BorderBrush" Value="#00000000"/>
+        </Style>
         <Style x:Key="TitleBarButton" TargetType="Button">
-            <Setter Property="Width" Value="46"/>
+            <Setter Property="Width" Value="42"/>
             <Setter Property="Height" Value="30"/>
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="#00000000"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
@@ -49,15 +109,15 @@
                         <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
+                                CornerRadius="0">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TitleBarControlHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PressedBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TitleBarControlPressedBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -72,7 +132,7 @@
                         <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="4">
+                                CornerRadius="0">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -88,10 +148,48 @@
             </Setter>
         </Style>
 
+        <Style x:Key="TitleUpdateButton" TargetType="Button">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinWidth" Value="74"/>
+            <Setter Property="Margin" Value="10,0,0,0"/>
+            <Setter Property="Padding" Value="8,0"/>
+            <Setter Property="FontSize" Value="11.5"/>
+            <Setter Property="FontWeight" Value="Normal"/>
+            <Setter Property="Background" Value="#FFFFFFFF"/>
+            <Setter Property="Foreground" Value="#FF44576A"/>
+            <Setter Property="BorderBrush" Value="#FFD7DEE5"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TitleUpdateHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource TitleUpdatePressedBrush}"/>
+                            </Trigger>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                                <Setter Property="Foreground" Value="#FF93A0AC"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="ToolButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="#00000000"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="MinWidth" Value="54"/>
             <Setter Property="Height" Value="34"/>
@@ -112,13 +210,15 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PressedBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PressedBrush}"/>
                             </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#FF777777"/>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                                <Setter Property="Foreground" Value="#FF93A0AC"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -135,9 +235,9 @@
         </Style>
 
         <Style x:Key="WatermarkSecondaryButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
-            <Setter Property="Background" Value="#FF3D3D3D"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="#FF686868"/>
+            <Setter Property="Background" Value="#FFF8FAFC"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="#FFDCE4EC"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="MinWidth" Value="0"/>
             <Setter Property="Height" Value="34"/>
@@ -155,9 +255,9 @@
         </Style>
 
         <Style x:Key="WatermarkDangerButton" TargetType="Button" BasedOn="{StaticResource WatermarkSecondaryButton}">
-            <Setter Property="Foreground" Value="#FFFFB8B8"/>
-            <Setter Property="BorderBrush" Value="#FF8A5555"/>
-            <Setter Property="Background" Value="#FF453333"/>
+            <Setter Property="Foreground" Value="#FFB42318"/>
+            <Setter Property="BorderBrush" Value="#FFF0C4C1"/>
+            <Setter Property="Background" Value="#FFFFF5F4"/>
         </Style>
 
         <Style x:Key="FeatureButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
@@ -172,8 +272,8 @@
         <Style x:Key="ToolTileButton" TargetType="Button" BasedOn="{StaticResource ToolButton}">
             <Setter Property="Width" Value="68"/>
             <Setter Property="Height" Value="56"/>
-            <Setter Property="Background" Value="#FF3F3F3F"/>
-            <Setter Property="BorderBrush" Value="#FF585858"/>
+            <Setter Property="Background" Value="#FFF8FAFC"/>
+            <Setter Property="BorderBrush" Value="#FFE1E8F0"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Margin" Value="4"/>
         </Style>
@@ -181,7 +281,7 @@
         <Style x:Key="PanelTitle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="20"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="Margin" Value="0,0,0,14"/>
         </Style>
 
@@ -190,8 +290,8 @@
             <Setter Property="Height" Value="70"/>
             <Setter Property="Margin" Value="5"/>
             <Setter Property="Padding" Value="8,7"/>
-            <Setter Property="Background" Value="#FF424242"/>
-            <Setter Property="BorderBrush" Value="#FF5A5A5A"/>
+            <Setter Property="Background" Value="#FFF8FAFC"/>
+            <Setter Property="BorderBrush" Value="#FFE1E8F0"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontSize" Value="12"/>
             <Setter Property="FontWeight" Value="Bold"/>
@@ -234,16 +334,16 @@
         </Style>
 
         <Style x:Key="SectionLabel" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{StaticResource TextSecondaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondaryBrush}"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Margin" Value="4,14,0,6"/>
         </Style>
 
         <Style x:Key="PanelTextBox" TargetType="TextBox">
-            <Setter Property="Background" Value="#FF2E2E2E"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush1}"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush1}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,5"/>
             <Setter Property="FontSize" Value="13"/>
@@ -269,13 +369,15 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource PressedBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PressedBrush}"/>
                             </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#FF777777"/>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                                <Setter Property="Foreground" Value="#FF93A0AC"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -286,7 +388,7 @@
         <Style x:Key="ViewerMenuButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#FF263241"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="#00000000"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Height" Value="38"/>
             <Setter Property="Margin" Value="0,1"/>
@@ -313,8 +415,10 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#FFD4E1EA"/>
                             </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#FF98A5B3"/>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                                <Setter Property="Foreground" Value="#FF93A0AC"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -332,7 +436,7 @@
         <Style x:Key="ViewerToolButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#FF253142"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="#00000000"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="MinWidth" Value="54"/>
             <Setter Property="Height" Value="34"/>
@@ -347,7 +451,7 @@
                         <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="10">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                               Margin="{TemplateBinding Padding}"/>
                         </Border>
@@ -358,8 +462,10 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#FFDCE8F6"/>
                             </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#FFB5BFCE"/>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                                <Setter Property="Foreground" Value="#FF93A0AC"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -379,7 +485,7 @@
                         <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="10">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                               Margin="{TemplateBinding Padding}"/>
                         </Border>
@@ -390,10 +496,10 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#FF394BDD"/>
                             </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#E6FFFFFF"/>
-                                <Setter TargetName="Bd" Property="Background" Value="#FFB9C2FF"/>
-                                <Setter TargetName="Bd" Property="BorderBrush" Value="#FFB9C2FF"/>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                                <Setter Property="Foreground" Value="#FF93A0AC"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -419,7 +525,7 @@
                         <Border x:Name="Bd" Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
-                                CornerRadius="8">
+                                CornerRadius="10">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
                                               Margin="{TemplateBinding Padding}"/>
                         </Border>
@@ -439,7 +545,7 @@
         <Style x:Key="ViewerNavButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="#FF40566B"/>
-            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="#00000000"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="MinWidth" Value="44"/>
             <Setter Property="Height" Value="64"/>
@@ -463,8 +569,10 @@
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="#FFE2ECF3"/>
                             </Trigger>
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Foreground" Value="#8040566B"/>
+                                                        <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                                <Setter Property="Foreground" Value="#FF93A0AC"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -473,7 +581,7 @@
         </Style>
 
         <Style x:Key="DarkComboItem" TargetType="ComboBoxItem">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="Background" Value="#FF303030"/>
             <Setter Property="Padding" Value="10,6"/>
             <Setter Property="HorizontalContentAlignment" Value="Left"/>
@@ -485,7 +593,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsHighlighted" Value="True">
-                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Bd" Property="Background" Value="{StaticResource ActiveBrush}"/>
@@ -591,7 +699,7 @@
                                 <Border Background="{TemplateBinding Background}"
                                         BorderBrush="{TemplateBinding BorderBrush}"
                                         BorderThickness="1"
-                                        CornerRadius="8"
+                                        CornerRadius="10"
                                         Padding="4"
                                         MinWidth="{TemplateBinding ActualWidth}">
                                     <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
@@ -612,9 +720,9 @@
         </Style>
 
         <Style x:Key="DarkComboBox" TargetType="ComboBox">
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimaryBrush}"/>
             <Setter Property="Background" Value="#FF303030"/>
-            <Setter Property="BorderBrush" Value="#FF4A4A4A"/>
+            <Setter Property="BorderBrush" Value="#FFE1E8F0"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboItem}"/>
             <Setter Property="Template">
@@ -641,14 +749,14 @@
                                                                   RecognizesAccessKey="True"/>
                                                 <Path HorizontalAlignment="Right" VerticalAlignment="Center"
                                                       Margin="0,0,8,0" Width="8" Height="5"
-                                                      Fill="{StaticResource TextSecondaryBrush}"
+                                                      Fill="{DynamicResource TextSecondaryBrush}"
                                                       Stretch="Uniform"
                                                       Data="M 0 0 L 5 5 L 10 0 Z"/>
                                             </Grid>
                                         </Border>
                                         <ControlTemplate.Triggers>
                                             <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource HoverBrush}"/>
                                             </Trigger>
                                         </ControlTemplate.Triggers>
                                     </ControlTemplate>
@@ -680,7 +788,7 @@
                                         Background="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}"
                                         BorderBrush="{Binding BorderBrush, RelativeSource={RelativeSource TemplatedParent}}"
                                         BorderThickness="1"
-                                        CornerRadius="8"
+                                        CornerRadius="10"
                                         Padding="4"
                                         MinWidth="{TemplateBinding ActualWidth}">
                                     <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
@@ -701,10 +809,10 @@
         </Style>
     </Window.Resources>
 
-    <Border x:Name="WindowShell" BorderThickness="1" BorderBrush="#FF3A3A3A" Background="{StaticResource TitleBarBrush}" CornerRadius="8">
+    <Border x:Name="WindowShell" BorderThickness="1" BorderBrush="#FF3A3A3A" Background="{DynamicResource TitleBarBrush}" CornerRadius="10">
     <DockPanel x:Name="RootDock">
         <!-- Custom Title Bar -->
-        <Border x:Name="TitleBar" DockPanel.Dock="Top" Height="30" Background="{StaticResource TitleBarBrush}"
+        <Border x:Name="TitleBar" DockPanel.Dock="Top" Height="30" Background="{DynamicResource TitleBarBrush}"
                 BorderBrush="#FF383838" BorderThickness="0,0,0,1"
                 MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
             <Grid>
@@ -713,41 +821,48 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0" VerticalAlignment="Center" Margin="12,0,12,0" ClipToBounds="True">
+                <Grid Grid.Column="0" VerticalAlignment="Center" Margin="12,0,6,0" ClipToBounds="True">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <Image Source="App.ico" Width="14" Height="14" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <Image Grid.Column="0" Source="App.ico" Width="14" Height="14" Margin="0,0,8,0" RenderOptions.BitmapScalingMode="HighQuality"/>
                     <TextBlock x:Name="TitleFileInfoText" Grid.Column="1" Text="见微 PicMark"
-                               Foreground="#FF1F2A37" FontSize="12.5"
+                               Foreground="#FFB9BEC7" FontSize="12.5"
                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                Visibility="Visible"/>
+                    <TextBlock x:Name="TitleVersionText" Grid.Column="2" Text="v0.3.0" Foreground="#FFB9BEC7" FontSize="11"
+                               Margin="10,0,0,0" VerticalAlignment="Center" ToolTip="当前版本"/>
+                    <Button x:Name="TitleUpdateButton" Grid.Column="3" Style="{StaticResource TitleUpdateButton}"
+                            Content="&#x68C0;&#x67E5;&#x66F4;&#x65B0;" Click="TitleUpdateButton_Click"
+                            ToolTip="&#x68C0;&#x67E5;&#x662F;&#x5426;&#x6709;&#x65B0;&#x7248;&#x672C;"/>
                 </Grid>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <Button x:Name="BtnMinimize" Style="{StaticResource TitleBarButton}" Click="BtnMinimize_Click" ToolTip="最小化">
-                        <Path Width="10" Height="10" Stretch="Uniform" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1"
+                        <Path Width="10" Height="10" Stretch="Uniform" Stroke="{DynamicResource TextPrimaryBrush}" StrokeThickness="1"
                               Data="M 1 5.5 L 9 5.5"/>
                     </Button>
                     <Button x:Name="BtnMaximize" Style="{StaticResource TitleBarButton}" Click="BtnMaximize_Click" ToolTip="最大化">
                         <Grid>
-                            <Path x:Name="MaximizeIcon" Width="10" Height="10" Stretch="Uniform" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1"
+                            <Path x:Name="MaximizeIcon" Width="10" Height="10" Stretch="Uniform" Stroke="{DynamicResource TextPrimaryBrush}" StrokeThickness="1"
                                   Data="M 1 2 L 9 2 L 9 8 L 1 8 Z"/>
-                            <Path x:Name="RestoreIcon" Width="10" Height="10" Stretch="Uniform" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1"
+                            <Path x:Name="RestoreIcon" Width="10" Height="10" Stretch="Uniform" Stroke="{DynamicResource TextPrimaryBrush}" StrokeThickness="1"
                                   Visibility="Collapsed"
                                   Data="M 3 1 L 9 1 L 9 7 L 7 7 L 7 3 L 3 3 Z M 1 3 L 7 3 L 7 9 L 1 9 Z"/>
                         </Grid>
                     </Button>
                     <Button x:Name="BtnClose" Style="{StaticResource TitleBarCloseButton}" Click="BtnClose_Click" ToolTip="关闭">
-                        <Path Width="10" Height="10" Stretch="Uniform" Stroke="{StaticResource TextPrimaryBrush}" StrokeThickness="1.2"
+                        <Path Width="10" Height="10" Stretch="Uniform" Stroke="{DynamicResource TextPrimaryBrush}" StrokeThickness="1.2"
                               Data="M 1.5 1.5 L 8.5 8.5 M 8.5 1.5 L 1.5 8.5"/>
                     </Button>
                 </StackPanel>
             </Grid>
         </Border>
 
-        <Border x:Name="TopToolbar" DockPanel.Dock="Top" Height="54" Background="{StaticResource ToolbarBrush}" BorderBrush="#FF383838" BorderThickness="0,0,0,1">
+        <Border x:Name="TopToolbar" DockPanel.Dock="Top" Height="54" Background="{DynamicResource ToolbarBrush}" BorderBrush="#FF383838" BorderThickness="0,0,0,1">
             <Grid Margin="10,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -769,7 +884,7 @@
                         <TextBlock Text="旋转" FontWeight="Bold"/>
                     </Button>
                     <Popup x:Name="RotatePopup" PlacementTarget="{Binding ElementName=BtnRotateTop}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
-                        <Border x:Name="RotatePopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="6" Width="158">
+                        <Border x:Name="RotatePopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="10" Padding="6" Width="158">
                             <StackPanel>
                                 <Button Style="{StaticResource SaveMenuButton}" Tag="RotateLeft90" Click="ImageTransform_Click"><TextBlock Text="向左旋转 90°"/></Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Tag="RotateRight90" Click="ImageTransform_Click"><TextBlock Text="向右旋转 90°"/></Button>
@@ -793,7 +908,7 @@
                         </StackPanel>
                     </Button>
                     <Popup x:Name="SavePopup" PlacementTarget="{Binding ElementName=BtnSave}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
-                        <Border x:Name="SavePopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="6" Width="184">
+                        <Border x:Name="SavePopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="10" Padding="6" Width="184">
                             <StackPanel>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuSaveAs_Click"><TextBlock Text="另存为"/></Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuSaveProject_Click"><TextBlock Text="保存工程文件"/></Button>
@@ -809,7 +924,7 @@
                         MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"/>
 
                 <TextBlock x:Name="TopFileNameText" Grid.Column="1" Text="未打开图片"
-                           Foreground="{StaticResource TextPrimaryBrush}" FontSize="13" FontWeight="Normal"
+                           Foreground="{DynamicResource TextPrimaryBrush}" FontSize="13" FontWeight="Normal"
                            VerticalAlignment="Center" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="16,0"
                            MaxWidth="240" Visibility="Collapsed"/>
 
@@ -822,7 +937,7 @@
                         <TextBlock Text="☰"/>
                     </Button>
                     <Popup x:Name="OptionsPopup" PlacementTarget="{Binding ElementName=BtnOptions}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True">
-                        <Border x:Name="OptionsPopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="6" Width="178">
+                        <Border x:Name="OptionsPopupPanel" Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="10" Padding="6" Width="178">
                             <StackPanel>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuOpenNewImage_Click">
                                     <TextBlock Text="打开新图片..."/>
@@ -837,7 +952,7 @@
                                     <TextBlock Text="用其他应用打开..."/>
                                 </Button>
                                 <Border Height="1" Background="#334A4A4A" Margin="8,5"/>
-                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuFormatConvert_Click">
+                                <Button x:Name="OptFormatConvert" Style="{StaticResource SaveMenuButton}" Click="MenuFormatConvert_Click">
                                     <TextBlock Text="另存为其他格式..."/>
                                 </Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuHistoryCache_Click">
@@ -851,12 +966,6 @@
                                 </Button>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuShortcutsHelp_Click">
                                     <TextBlock Text="快捷键"/>
-                                </Button>
-                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuDefaultAppsHelp_Click">
-                                    <TextBlock Text="设为默认打开方式"/>
-                                </Button>
-                                <Button Style="{StaticResource SaveMenuButton}" Click="MenuReportIssue_Click">
-                                    <TextBlock Text="汇报错误"/>
                                 </Button>
                                 <Border Height="1" Background="#334A4A4A" Margin="8,5"/>
                                 <Button Style="{StaticResource SaveMenuButton}" Click="MenuAbout_Click">
@@ -875,7 +984,7 @@
                 <ColumnDefinition x:Name="RightEditColumn" Width="0"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Visibility="Collapsed" Background="{StaticResource PanelBrush}" BorderBrush="#FF454545" BorderThickness="0,0,1,0">
+            <Border Grid.Column="0" Visibility="Collapsed" Background="{DynamicResource PanelBrush}" BorderBrush="#FF454545" BorderThickness="0,0,1,0">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel Margin="10,10,10,16">
                         <Button x:Name="BtnOpenMultiple" Style="{StaticResource FeatureButton}" Click="BtnOpenMultiple_Click">
@@ -904,7 +1013,7 @@
                         </UniformGrid>
 
                         <Popup x:Name="ArrowPopup" PlacementTarget="{Binding ElementName=BtnArrow}" Placement="Right" StaysOpen="False" AllowsTransparency="True">
-                            <Border Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="8">
+                            <Border Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="10" Padding="8">
                                 <StackPanel Orientation="Horizontal">
                                     <Button Style="{StaticResource ToolButton}" Width="72" Height="48" Tag="Filled" Click="ArrowStyle_Click" ToolTip="实心箭头">
                                         <Viewbox Width="48" Height="24"><Canvas Width="80" Height="36"><Path Fill="Red" Data="M 4 20 L 46 20 L 46 10 L 76 18 L 46 30 L 46 22 L 4 22 Z"/></Canvas></Viewbox>
@@ -923,7 +1032,7 @@
                         </Popup>
 
                         <Popup x:Name="MosaicPopup" PlacementTarget="{Binding ElementName=BtnMosaic}" Placement="Right" StaysOpen="False" AllowsTransparency="True">
-                            <Border Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="8" Padding="10" Width="230">
+                            <Border Background="#FF303030" BorderBrush="#FF4A4A4A" BorderThickness="1" CornerRadius="10" Padding="10" Width="230">
                                 <StackPanel>
                                     <UniformGrid Columns="2">
                                         <Button x:Name="MosaicModePixelBtn" Style="{StaticResource ToolButton}" Tag="Pixelate" Click="MosaicMode_Click">
@@ -943,7 +1052,7 @@
                                                 ValueChanged="MosaicStrengthSlider_ValueChanged"
                                                 PreviewMouseWheel="MosaicStrengthSlider_PreviewMouseWheel"/>
                                         <TextBlock x:Name="MosaicStrengthText" Grid.Column="1" Text="18"
-                                                   Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"
                                                    TextAlignment="Right"/>
                                     </Grid>
                                 </StackPanel>
@@ -951,9 +1060,9 @@
                         </Popup>
 
                         <Popup x:Name="ShapeHintPopup" PlacementTarget="{Binding ElementName=PanelBtnEllipse}" Placement="Left" StaysOpen="False" AllowsTransparency="True">
-                            <Border Background="#EE303030" BorderBrush="#FF5A5A5A" BorderThickness="1" CornerRadius="8" Padding="10,7">
+                            <Border Background="#EE303030" BorderBrush="#FF5A5A5A" BorderThickness="1" CornerRadius="10" Padding="10,7">
                                 <TextBlock x:Name="ShapeHintText" Text="按住 Shift 画正圆"
-                                           Foreground="{StaticResource TextPrimaryBrush}" FontSize="12"/>
+                                           Foreground="{DynamicResource TextPrimaryBrush}" FontSize="12"/>
                             </Border>
                         </Popup>
 
@@ -1062,9 +1171,11 @@
                                                 <Trigger Property="IsHighlighted" Value="True">
                                                     <Setter TargetName="Bd" Property="Background" Value="{DynamicResource {x:Static SystemColors.MenuHighlightBrushKey}}"/>
                                                 </Trigger>
-                                                <Trigger Property="IsEnabled" Value="False">
-                                                    <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
-                                                </Trigger>
+                                                                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Bd" Property="Opacity" Value="0.45"/>
+                                <Setter Property="Foreground" Value="#FF93A0AC"/>
+                                <Setter Property="Cursor" Value="Arrow"/>
+                            </Trigger>
                                             </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Setter.Value>
@@ -1118,7 +1229,7 @@
                         </Grid.ColumnDefinitions>
                         <Button Grid.Column="0" Style="{StaticResource ToolButton}" Click="BtnPrevImage_Click"><TextBlock Text="上一张"/></Button>
                         <TextBlock x:Name="BatchPositionText" Grid.Column="1" VerticalAlignment="Center" Margin="10,0"
-                                   FontSize="14" Foreground="{StaticResource TextPrimaryBrush}"
+                                   FontSize="14" Foreground="{DynamicResource TextPrimaryBrush}"
                                    TextTrimming="CharacterEllipsis"/>
                         <Button Grid.Column="2" Style="{StaticResource ToolButton}" Click="BtnNextImage_Click"><TextBlock Text="下一张"/></Button>
                     </Grid>
@@ -1138,13 +1249,13 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="批量水印" Foreground="White" FontWeight="Bold" VerticalAlignment="Center" Margin="6,0,10,0"/>
-                        <TextBlock x:Name="BatchWatermarkInfoText" Grid.Column="1" Foreground="{StaticResource TextPrimaryBrush}"
+                        <TextBlock x:Name="BatchWatermarkInfoText" Grid.Column="1" Foreground="{DynamicResource TextPrimaryBrush}"
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                         <ProgressBar x:Name="BatchWatermarkProgress" Grid.Column="2" Height="6" VerticalAlignment="Center"
                                      Margin="8,0" Minimum="0" Maximum="1" Value="0"
                                      Background="#FF1E2734" Foreground="{StaticResource AccentBrush}" BorderThickness="0"/>
                         <Button x:Name="BtnBatchWatermarkAddFiles" Grid.Column="3" Style="{StaticResource WatermarkSecondaryButton}" Height="28" Click="BtnBatchWatermarkAddFiles_Click"><TextBlock Text="添加图片"/></Button>
-                        <Button x:Name="BtnBatchWatermarkAddFolder" Grid.Column="4" Style="{StaticResource WatermarkPrimaryButton}" Height="28" Click="BtnBatchWatermarkAddFolder_Click"><TextBlock Text="添加文件夹"/></Button>
+                        <Button x:Name="BtnBatchWatermarkAddFolder" Grid.Column="4" Style="{StaticResource WatermarkPrimaryButton}" Height="28" Click="BtnBatchWatermarkAddFolder_Click" ToolTip="&#x9009;&#x62E9;&#x6587;&#x4EF6;&#x5939;&#x540e;&#x4f1a;&#x4f5c;&#x4e3a;&#x65b0;&#x7684;&#x6279;&#x6b21;"><TextBlock Text="&#x9009;&#x62E9;&#x6587;&#x4EF6;&#x5939;"/></Button>
                         <Button x:Name="BtnBatchWatermarkPrev" Grid.Column="5" Style="{StaticResource WatermarkSecondaryButton}" Height="28" Click="BtnBatchWatermarkPrev_Click"><TextBlock Text="上一张"/></Button>
                         <Button x:Name="BtnBatchWatermarkNext" Grid.Column="6" Style="{StaticResource WatermarkSecondaryButton}" Height="28" Click="BtnBatchWatermarkNext_Click"><TextBlock Text="下一张"/></Button>
                         <Button x:Name="BtnBatchWatermarkRun" Grid.Column="7" Style="{StaticResource WatermarkSecondaryButton}" Height="28" Click="BtnBatchWatermarkRun_Click"><TextBlock Text="开始输出"/></Button>
@@ -1182,16 +1293,11 @@
                     </Viewbox>
                 </Button>
 
-                <Border x:Name="EmptyState" Width="520" Height="360" HorizontalAlignment="Center" VerticalAlignment="Center"
-                        Background="#FFF7FAFB" BorderBrush="#FFB9CBD8" BorderThickness="1" CornerRadius="12"
-                        Cursor="Hand" MouseLeftButtonUp="EmptyState_MouseLeftButtonUp">
-                    <Border.Effect>
-                        <DropShadowEffect Color="#FF5A6B80" BlurRadius="18" ShadowDepth="4" Opacity="0.14"/>
-                    </Border.Effect>
+                <Border x:Name="EmptyState" MinWidth="320" MinHeight="0" Padding="0" HorizontalAlignment="Center" VerticalAlignment="Center"
+                        Background="Transparent" BorderBrush="Transparent" BorderThickness="0" CornerRadius="0">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="拖入图片开始查看" Foreground="#FF152133" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center"/>
-                        <TextBlock Text="需要标注时点击右上角编辑" Foreground="#FF637083" FontSize="14" HorizontalAlignment="Center" Margin="0,10,0,0"/>
-                        <StackPanel x:Name="RecentFilesHost" Margin="0,22,0,0" Width="370"/>
+                        <TextBlock Text="拖入图片开始查看" Foreground="#FF152133" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+                        <StackPanel x:Name="RecentFilesHost" Margin="0,18,0,0"/>
                     </StackPanel>
                 </Border>
 
@@ -1206,7 +1312,7 @@
                             Background="#F6F7FAFB" BorderBrush="#FFB9CBD8" BorderThickness="1" CornerRadius="10">
                         <TextBlock x:Name="StatusText" Text="打开、粘贴或拖入图片"
                                    FontSize="12.5"
-                                   Foreground="{StaticResource TextSecondaryBrush}"
+                                   Foreground="{DynamicResource TextSecondaryBrush}"
                                    VerticalAlignment="Center"
                                    TextTrimming="CharacterEllipsis"
                                    ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
@@ -1251,7 +1357,7 @@
                                 Background="#F6F7FAFB" BorderBrush="#FFB9CBD8" BorderThickness="1" CornerRadius="10">
                             <TextBlock x:Name="ImageInfoText"
                                        FontSize="12.5"
-                                       Foreground="#FFD5D8DF"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
                                        VerticalAlignment="Center"
                                        TextAlignment="Right"
                                        MaxWidth="230"
@@ -1261,7 +1367,7 @@
                                 Background="#F6F7FAFB" BorderBrush="#FFB9CBD8" BorderThickness="1" CornerRadius="10">
                             <TextBlock x:Name="CurrentFileText" Text="未打开图片"
                                        FontSize="12.5"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
                                        VerticalAlignment="Center"
                                        TextAlignment="Right"
                                        TextTrimming="CharacterEllipsis"
@@ -1272,7 +1378,7 @@
             </Grid>
 
             <Border x:Name="RightEditPanel" Grid.Column="1" Visibility="Collapsed"
-                    Background="#FF3A3A3A" BorderBrush="#FF454545" BorderThickness="1,0,0,0" Padding="18">
+                    Background="#FFFFFFFF" BorderBrush="#FFE1E8F0" BorderThickness="1,0,0,0" Padding="18">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Text="标注工具" Style="{StaticResource PanelTitle}"/>
@@ -1392,7 +1498,7 @@
                                 </UniformGrid>
 
                                 <TextBlock Text="拖动边角调整范围，Enter 确认 / Esc 取消"
-                                           Foreground="{StaticResource TextSecondaryBrush}" FontSize="11.5"
+                                           Foreground="{DynamicResource TextSecondaryBrush}" FontSize="11.5"
                                            TextWrapping="Wrap" Margin="0,0,0,10"/>
 
                                 <UniformGrid Columns="2">
@@ -1488,9 +1594,13 @@
                                     <TextBlock x:Name="WatermarkTextLabel" Text="水印文字（可按 Enter 手动分行）" Style="{StaticResource SectionLabel}"/>
                                     <TextBox x:Name="WatermarkTextBox" Height="72" MaxLength="120"
                                              AcceptsReturn="True" TextWrapping="Wrap"
-                                             Background="#FF2E2E2E" Foreground="White" BorderBrush="#FF606060"
+                                             Background="#FFFFFFFF" Foreground="#FF1F2A37" BorderBrush="#FFDCE4EC"
                                              VerticalScrollBarVisibility="Auto" Padding="8,6"
                                              TextChanged="WatermarkOption_Changed"/>
+                                    <StackPanel x:Name="WatermarkTextHistoryHost" Margin="0,8,0,0">
+                                        <TextBlock Text="&#x5E38;&#x7528;&#x6C34;&#x5370;&#x65B9;&#x6848;" Style="{StaticResource SectionLabel}" Margin="0,0,0,6"/>
+                                        <WrapPanel x:Name="WatermarkTextHistoryPanel"/>
+                                    </StackPanel>
 
                                     <TextBlock x:Name="WatermarkFontLabel" Text="字体" Style="{StaticResource SectionLabel}"/>
                                     <UniformGrid x:Name="WatermarkFontPanel" Columns="4">
@@ -1502,22 +1612,31 @@
 
                                     <Grid x:Name="WatermarkFontSizeHeader" Margin="0,10,0,3">
                                         <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions>
-                                        <TextBlock Text="字号" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                        <TextBlock x:Name="WatermarkFontSizeValue" Grid.Column="1" Foreground="White" TextAlignment="Right" VerticalAlignment="Center"/>
+                                        <TextBlock Text="字号" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="WatermarkFontSizeValue" Grid.Column="1" Foreground="#FF334155" TextAlignment="Right" VerticalAlignment="Center"/>
                                         <Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="FontSize" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button>
                                     </Grid>
-                                    <Grid x:Name="WatermarkFontSizePanel"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/></Grid.ColumnDefinitions><Slider x:Name="WatermarkFontSizeSlider" Minimum="12" Maximum="72" Value="28" TickFrequency="2" IsSnapToTickEnabled="True" ValueChanged="WatermarkOption_Changed"/><Button x:Name="WatermarkBoldBtn" Grid.Column="1" Style="{StaticResource ToolButton}" Height="32" Margin="8,0,0,0" Click="WatermarkBold_Click"><TextBlock Text="B" FontWeight="Bold" FontSize="16"/></Button></Grid>
+                                    <Grid x:Name="WatermarkFontSizePanel">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition/>
+                                            <ColumnDefinition Width="78"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Slider x:Name="WatermarkFontSizeSlider" Minimum="12" Maximum="72" Value="28" TickFrequency="2" IsSnapToTickEnabled="True" ValueChanged="WatermarkOption_Changed"/>
+                                        <Button x:Name="WatermarkBoldBtn" Grid.Column="1" Style="{StaticResource ToolButton}" Height="32" Margin="8,0,0,0" Click="WatermarkBold_Click" ToolTip="&#x52A0;&#x7C97;&#x6C34;&#x5370;&#x6587;&#x5B57;">
+                                            <TextBlock Text="&#x6587;&#x5B57;&#x52A0;&#x7C97;" FontWeight="Bold" FontSize="12"/>
+                                        </Button>
+                                    </Grid>
 
-                                    <Grid Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="不透明度" Foreground="{StaticResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkOpacityValue" Grid.Column="1" Foreground="White" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="Opacity" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
+                                    <Grid Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="不透明度" Foreground="{DynamicResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkOpacityValue" Grid.Column="1" Foreground="#FF334155" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="Opacity" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
                                     <Slider x:Name="WatermarkOpacitySlider" Minimum="5" Maximum="100" Value="20" TickFrequency="5" ValueChanged="WatermarkOption_Changed"/>
 
-                                    <Grid Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="角度" Foreground="{StaticResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkAngleValue" Grid.Column="1" Foreground="White" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="Angle" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
+                                    <Grid Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="角度" Foreground="{DynamicResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkAngleValue" Grid.Column="1" Foreground="#FF334155" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="Angle" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
                                     <Slider x:Name="WatermarkAngleSlider" Minimum="-90" Maximum="90" Value="0" TickFrequency="1" ValueChanged="WatermarkOption_Changed"/>
 
-                                    <Grid x:Name="WatermarkSpacingHeader" Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="间距（密度）" Foreground="{StaticResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkSpacingValue" Grid.Column="1" Foreground="White" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="Spacing" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
+                                    <Grid x:Name="WatermarkSpacingHeader" Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="间距（密度）" Foreground="{DynamicResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkSpacingValue" Grid.Column="1" Foreground="#FF334155" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="Spacing" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
                                     <Slider x:Name="WatermarkSpacingSlider" Minimum="80" Maximum="400" Value="204" TickFrequency="4" IsSnapToTickEnabled="True" ValueChanged="WatermarkOption_Changed"/>
 
-                                    <Grid x:Name="WatermarkOffsetHeader" Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="平铺偏移" Foreground="{StaticResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkOffsetValue" Grid.Column="1" Foreground="White" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="Offset" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
+                                    <Grid x:Name="WatermarkOffsetHeader" Margin="0,10,0,3"><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="46"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions><TextBlock Text="平铺偏移" Foreground="{DynamicResource TextSecondaryBrush}"/><TextBlock x:Name="WatermarkOffsetValue" Grid.Column="1" Foreground="#FF334155" TextAlignment="Right"/><Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="Offset" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button></Grid>
                                     <Slider x:Name="WatermarkOffsetSlider" Minimum="-400" Maximum="400" Value="0" TickFrequency="1" ValueChanged="WatermarkOption_Changed"/>
 
                                     <StackPanel x:Name="LogoParametersPanel" Visibility="Collapsed" Margin="0,12,0,0">
@@ -1536,8 +1655,8 @@
                                         <TextBlock Text="外观" Style="{StaticResource SectionLabel}" Margin="0,12,0,6"/>
                                         <Grid Margin="0,10,0,3">
                                             <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="54"/><ColumnDefinition Width="52"/></Grid.ColumnDefinitions>
-                                            <TextBlock Text="Logo 大小" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center"/>
-                                            <TextBlock x:Name="WatermarkLogoScaleValue" Grid.Column="1" Foreground="White" TextAlignment="Right" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Logo 大小" Foreground="{DynamicResource TextSecondaryBrush}" VerticalAlignment="Center"/>
+                                            <TextBlock x:Name="WatermarkLogoScaleValue" Grid.Column="1" Foreground="#FF334155" TextAlignment="Right" VerticalAlignment="Center"/>
                                             <Button Grid.Column="2" Style="{StaticResource WatermarkSecondaryButton}" Height="24" Padding="6,0" Margin="6,0,0,0" Tag="LogoScale" Click="WatermarkReset_Click"><TextBlock Text="重置" FontSize="11"/></Button>
                                         </Grid>
                                         <Slider x:Name="WatermarkLogoScaleSlider" Minimum="3" Maximum="50" Value="18" TickFrequency="1" IsSnapToTickEnabled="True" ValueChanged="WatermarkOption_Changed"/>
@@ -1612,7 +1731,7 @@
                                     ValueChanged="ThicknessSlider_ValueChanged"
                                     PreviewMouseWheel="ThicknessSlider_PreviewMouseWheel"/>
                             <TextBlock x:Name="ThicknessValueText" Grid.Column="1" Text="9"
-                                       Foreground="{StaticResource TextSecondaryBrush}"
+                                       Foreground="{DynamicResource TextSecondaryBrush}"
                                        VerticalAlignment="Center" TextAlignment="Right"/>
                         </Grid>
 
@@ -1630,7 +1749,7 @@
                                 <TextBlock Text="另存为"/>
                             </Button>
                             <Button Style="{StaticResource ToolButton}" Height="40" Margin="6,0,0,0"
-                                    BorderBrush="{StaticResource BorderBrush1}" BorderThickness="1"
+                                    BorderBrush="{DynamicResource BorderBrush1}" BorderThickness="1"
                                     Click="MenuOverwrite_Click">
                                 <TextBlock Text="覆盖原图"/>
                             </Button>

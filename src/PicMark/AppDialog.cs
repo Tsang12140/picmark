@@ -11,7 +11,7 @@ namespace PicMark
     {
         public static MessageBoxResult Show(Window owner, string message, string title, MessageBoxButton buttons = MessageBoxButton.OK)
         {
-            var dialog = new AppDialogWindow(title, message, buttons)
+            var dialog = new AppDialogWindow(owner, title, message, buttons)
             {
                 Owner = owner
             };
@@ -21,7 +21,7 @@ namespace PicMark
 
         public static bool ShowWithPrimaryAction(Window owner, string message, string title, string primaryActionText, string closeText = "关闭")
         {
-            var dialog = new AppDialogWindow(title, message, MessageBoxButton.OK, primaryActionText, closeText)
+            var dialog = new AppDialogWindow(owner, title, message, MessageBoxButton.OK, primaryActionText, closeText)
             {
                 Owner = owner
             };
@@ -35,14 +35,16 @@ namespace PicMark
         private readonly MessageBoxButton _buttons;
         private readonly string _primaryActionText;
         private readonly string _closeText;
+        private readonly bool _useDarkTheme;
 
         public MessageBoxResult Result { get; private set; }
 
-        public AppDialogWindow(string title, string message, MessageBoxButton buttons, string primaryActionText = null, string closeText = null)
+        public AppDialogWindow(Window owner, string title, string message, MessageBoxButton buttons, string primaryActionText = null, string closeText = null)
         {
             _buttons = buttons;
             _primaryActionText = primaryActionText;
             _closeText = closeText;
+            _useDarkTheme = OwnerUsesDarkTheme(owner);
             Result = DefaultResult(buttons);
 
             Width = 520;
@@ -58,12 +60,27 @@ namespace PicMark
             Content = BuildContent(title, message);
         }
 
+        private static bool OwnerUsesDarkTheme(Window owner)
+        {
+            var titleBrush = owner?.TryFindResource("TitleBarBrush") as SolidColorBrush;
+            if (titleBrush == null) return false;
+            var color = titleBrush.Color;
+            return color.R + color.G + color.B < 360;
+        }
+
         private UIElement BuildContent(string title, string message)
         {
+            var panelBackground = _useDarkTheme ? Color.FromRgb(58, 58, 58) : Colors.White;
+            var panelBorder = _useDarkTheme ? Color.FromRgb(76, 76, 76) : Color.FromRgb(198, 213, 225);
+            var titleForeground = _useDarkTheme ? Colors.White : Color.FromRgb(31, 42, 55);
+            var bodyForeground = _useDarkTheme ? Color.FromRgb(244, 244, 245) : Color.FromRgb(62, 77, 93);
+            var closeForeground = _useDarkTheme ? Color.FromRgb(218, 222, 230) : Color.FromRgb(78, 96, 113);
             var root = new Grid { Margin = new Thickness(24) };
             var panel = new Border
             {
-                Background = new SolidColorBrush(Color.FromRgb(58, 58, 58)),
+                Background = new SolidColorBrush(panelBackground),
+                BorderBrush = new SolidColorBrush(panelBorder),
+                BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(22, 18, 22, 22),
                 Effect = new DropShadowEffect
@@ -71,7 +88,7 @@ namespace PicMark
                     Color = Colors.Black,
                     BlurRadius = 24,
                     ShadowDepth = 5,
-                    Opacity = 0.5
+                    Opacity = _useDarkTheme ? 0.5 : 0.18
                 }
             };
 
@@ -93,7 +110,7 @@ namespace PicMark
             var titleText = new TextBlock
             {
                 Text = title,
-                Foreground = Brushes.White,
+                Foreground = new SolidColorBrush(titleForeground),
                 FontSize = 16,
                 FontWeight = FontWeights.Bold,
                 VerticalAlignment = VerticalAlignment.Center
@@ -108,7 +125,7 @@ namespace PicMark
                 Width = 28,
                 Height = 28,
                 Background = Brushes.Transparent,
-                Foreground = new SolidColorBrush(Color.FromRgb(218, 222, 230)),
+                Foreground = new SolidColorBrush(closeForeground),
                 BorderThickness = new Thickness(0),
                 FontSize = 18,
                 Cursor = Cursors.Hand,
@@ -122,7 +139,7 @@ namespace PicMark
             var messageText = new TextBlock
             {
                 Text = message,
-                Foreground = new SolidColorBrush(Color.FromRgb(244, 244, 245)),
+                Foreground = new SolidColorBrush(bodyForeground),
                 FontSize = 14,
                 LineHeight = 22,
                 TextWrapping = TextWrapping.Wrap,
@@ -186,9 +203,9 @@ namespace PicMark
                 Padding = new Thickness(14, 0, 14, 0),
                 FontWeight = primary ? FontWeights.Bold : FontWeights.Normal,
                 Cursor = Cursors.Hand,
-                Background = new SolidColorBrush(primary ? Color.FromRgb(82, 101, 255) : Color.FromRgb(70, 70, 70)),
-                BorderBrush = new SolidColorBrush(primary ? Color.FromRgb(82, 101, 255) : Color.FromRgb(86, 86, 86)),
-                Foreground = Brushes.White,
+                Background = new SolidColorBrush(primary ? Color.FromRgb(82, 101, 255) : (_useDarkTheme ? Color.FromRgb(70, 70, 70) : Color.FromRgb(247, 250, 252))),
+                BorderBrush = new SolidColorBrush(primary ? Color.FromRgb(82, 101, 255) : (_useDarkTheme ? Color.FromRgb(86, 86, 86) : Color.FromRgb(200, 214, 224))),
+                Foreground = new SolidColorBrush(primary ? Colors.White : (_useDarkTheme ? Color.FromRgb(244, 244, 245) : Color.FromRgb(48, 65, 82))),
                 Template = CreateButtonTemplate(5)
             };
             button.Click += (s, e) => CloseWith(result);

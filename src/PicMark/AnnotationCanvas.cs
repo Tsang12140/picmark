@@ -109,6 +109,16 @@ namespace PicMark
 
         public bool HasSelection => _selected != null;
         public bool HasPendingCrop => CurrentTool == AnnotationTool.Crop && _cropRect.HasValue;
+
+        public sealed class CropSessionState
+        {
+            public bool HasCrop { get; set; }
+            public double? AspectRatio { get; set; }
+            public double X { get; set; }
+            public double Y { get; set; }
+            public double Width { get; set; }
+            public double Height { get; set; }
+        }
         public bool IsEditingEnabled
         {
             get => _isEditingEnabled;
@@ -1635,6 +1645,44 @@ namespace PicMark
 
             dc.DrawRoundedRectangle(_cacheEditingBgBrush, _cacheEditingPen, bounds, 4, 4);
             dc.DrawText(ft, _editingText.Location);
+        }
+
+        public CropSessionState CaptureCropSession()
+        {
+            var state = new CropSessionState { AspectRatio = _cropAspectRatio };
+            if (Image == null || !_cropRect.HasValue) return state;
+
+            Rect rect = NormalizeRect(_cropRect.Value);
+            double width = Math.Max(1, Image.PixelWidth);
+            double height = Math.Max(1, Image.PixelHeight);
+            state.HasCrop = true;
+            state.X = Math.Max(0, Math.Min(1, rect.X / width));
+            state.Y = Math.Max(0, Math.Min(1, rect.Y / height));
+            state.Width = Math.Max(0, Math.Min(1 - state.X, rect.Width / width));
+            state.Height = Math.Max(0, Math.Min(1 - state.Y, rect.Height / height));
+            return state;
+        }
+
+        public void RestoreCropSession(CropSessionState state)
+        {
+            _cropAspectRatio = state?.AspectRatio;
+            _cropDragHandle = CropHandle.None;
+            Cursor = null;
+            if (Image == null || state == null || !state.HasCrop)
+            {
+                _cropRect = null;
+                InvalidateVisual();
+                return;
+            }
+
+            double imageWidth = Math.Max(1, Image.PixelWidth);
+            double imageHeight = Math.Max(1, Image.PixelHeight);
+            double x = Math.Max(0, Math.Min(imageWidth - 8, state.X * imageWidth));
+            double y = Math.Max(0, Math.Min(imageHeight - 8, state.Y * imageHeight));
+            double width = Math.Max(8, Math.Min(imageWidth - x, state.Width * imageWidth));
+            double height = Math.Max(8, Math.Min(imageHeight - y, state.Height * imageHeight));
+            _cropRect = new Rect(x, y, width, height);
+            InvalidateVisual();
         }
 
         public void BeginCrop()

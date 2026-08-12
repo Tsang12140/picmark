@@ -99,6 +99,16 @@ namespace PicMark
             }
         }
 
+        public static BitmapSource LoadPreview(string path, int decodePixelWidth)
+        {
+            using (var archive = ZipFile.OpenRead(path))
+            {
+                var imageEntry = archive.GetEntry("source.png");
+                if (imageEntry == null) return null;
+                using (var stream = imageEntry.Open())
+                    return LoadBitmap(stream, decodePixelWidth);
+            }
+        }
         private static void SavePng(BitmapSource source, Stream stream)
         {
             var encoder = new PngBitmapEncoder();
@@ -111,11 +121,12 @@ namespace PicMark
             }
         }
 
-        private static BitmapSource LoadBitmap(Stream stream)
+        private static BitmapSource LoadBitmap(Stream stream, int decodePixelWidth = 0)
         {
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
+            if (decodePixelWidth > 0) bitmap.DecodePixelWidth = decodePixelWidth;
             bitmap.StreamSource = stream;
             bitmap.EndInit();
             bitmap.Freeze();
