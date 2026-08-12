@@ -176,14 +176,6 @@ jobs:
           S4_PREFIX: ${{ steps.s4_upload.outputs.s4_prefix }}
         run: |
           $files = Get-ChildItem -LiteralPath 'release' -File | ForEach-Object { $_.FullName }
-          $notes = @"
-## S4 upload verified
-
-All release files and `picmark/update.json` were uploaded to Bitiful S4 and read-back verified.
-
-Verified S4 prefix (not a public download link): `$env:S4_PREFIX`
-
-This GitHub Release is created only after verification succeeds.
-"@
+          $notes = "S4 upload verified.`n`nAll release files and picmark/update.json were uploaded to Bitiful S4 and read-back verified.`n`nVerified S4 prefix (not a public download link): $env:S4_PREFIX`n`nThis GitHub Release is created only after verification succeeds."
           Set-Content -LiteralPath 'release\S4-UPLOAD-VERIFIED.md' -Value $notes -Encoding utf8
           gh release create $env:RELEASE_TAG $files --repo $env:GITHUB_REPOSITORY --title "PicMark $env:RELEASE_TAG" --notes-file 'release\S4-UPLOAD-VERIFIED.md'
