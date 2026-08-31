@@ -141,6 +141,11 @@ jobs:
           aws --version
           aws configure set default.s3.addressing_style virtual
 
+          # This dedicated bucket contains only public PicMark release files.
+          # Bitiful applies public access at bucket level as well as object level.
+          aws --endpoint-url $env:S4_ENDPOINT s3api put-bucket-acl --bucket $env:S4_BUCKET --acl public-read
+          if ($LASTEXITCODE -ne 0) { throw 'S4 bucket public-read configuration failed.' }
+
           $prefix = "s3://$env:S4_BUCKET/picmark/releases/$env:RELEASE_TAG"
           Get-ChildItem -LiteralPath 'release' -File | ForEach-Object {
             $remote = "$prefix/$($_.Name)"
@@ -169,6 +174,16 @@ jobs:
 
           $updateHead = aws --endpoint-url $env:S4_ENDPOINT s3api head-object --bucket $env:S4_BUCKET --key 'picmark/update.json' --output json | ConvertFrom-Json
           if ($updateHead.ContentLength -le 0) { throw 'S4 verification failed for picmark/update.json.' }
+
+          $publicUpdateUrl = "$($env:S4_PUBLIC_BASE_URL.TrimEnd('/'))/update.json"
+          try {
+            $publicUpdate = Invoke-WebRequest -Uri $publicUpdateUrl -UseBasicParsing -TimeoutSec 15
+            if ($publicUpdate.StatusCode -ne 200) { throw "Unexpected HTTP status $($publicUpdate.StatusCode)." }
+          }
+          catch {
+            throw "S4 public download verification failed for $publicUpdateUrl. $($_.Exception.Message)"
+          }
+
           $releasePrefix = "s3://$env:S4_BUCKET/picmark/releases/$env:RELEASE_TAG/"
           "s4_prefix=$releasePrefix" >> $env:GITHUB_OUTPUT
 
@@ -178,7 +193,7 @@ jobs:
           - Bucket: ``$env:S4_BUCKET``
           - Release prefix: ``picmark/releases/$env:RELEASE_TAG/``
           - Verified files: $((Get-ChildItem -LiteralPath 'release' -File).Count) release files + ``picmark/update.json``
-          - Verification: each uploaded release file was read back with ``s3api head-object`` and checked against its local byte size.
+          - Verification: each uploaded release file was read back with ``s3api head-object`` and checked against its local byte size; the public update URL returned HTTP 200.
           "@ | Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY
 
       - name: Publish GitHub Release
