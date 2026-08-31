@@ -34,7 +34,7 @@ picmark/releases/v0.3.1/release-manifest.json
 picmark/update.json
 ```
 
-The release workflow uploads every release artifact to Bitiful S4, then uses `s3api head-object` to read each object back and verify its byte size. It generates `picmark/update.json` only after that verification; this mirror manifest contains direct domestic URLs for the setup and portable packages. It writes an **S4 upload verified** section into the Actions summary and only creates the GitHub Release after every verification succeeds.
+The release workflow uploads every release artifact to Bitiful S4 with public read access, then uses `s3api head-object` to read each object back and verify its byte size. It generates `picmark/update.json` only after that verification; this mirror manifest contains direct domestic URLs for the setup and portable packages. It writes an **S4 upload verified** section into the Actions summary and only creates the GitHub Release after every verification succeeds.
 
 To receive a success signal without opening the bucket, enable repository release notifications in GitHub: **Watch > Custom > Releases**. A new PicMark Release then means the S4 upload and read-back verification both succeeded. If S4 upload or verification fails, the workflow fails and no GitHub Release is created.
 
