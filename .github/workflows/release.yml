@@ -141,11 +141,6 @@ jobs:
           aws --version
           aws configure set default.s3.addressing_style virtual
 
-          # This dedicated bucket contains only public PicMark release files.
-          # Bitiful applies public access at bucket level as well as object level.
-          aws --endpoint-url $env:S4_ENDPOINT s3api put-bucket-acl --bucket $env:S4_BUCKET --acl public-read
-          if ($LASTEXITCODE -ne 0) { throw 'S4 bucket public-read configuration failed.' }
-
           $prefix = "s3://$env:S4_BUCKET/picmark/releases/$env:RELEASE_TAG"
           Get-ChildItem -LiteralPath 'release' -File | ForEach-Object {
             $remote = "$prefix/$($_.Name)"
