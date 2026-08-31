@@ -33,7 +33,7 @@ namespace PicMark
         public double OffsetX { get; set; }
         public double OffsetY { get; set; }
 
-        public string DisplayName => string.IsNullOrWhiteSpace(Path) ? "图片" : System.IO.Path.GetFileName(Path);
+        public string DisplayName => Image == null ? "待添加图片" : System.IO.Path.GetFileName(Path);
         public double Aspect => Image == null || Image.PixelHeight <= 0 ? 1.0 : (double)Image.PixelWidth / Image.PixelHeight;
 
         public CollageItem WithImage(BitmapSource image)
@@ -64,6 +64,27 @@ namespace PicMark
         public List<CollageDivider> Dividers { get; } = new List<CollageDivider>();
     }
 
+    public class CollageSlotEventArgs : EventArgs
+    {
+        public CollageSlotEventArgs(int slotIndex)
+        {
+            SlotIndex = slotIndex;
+        }
+
+        public int SlotIndex { get; }
+    }
+
+    public sealed class CollageSlotDropEventArgs : CollageSlotEventArgs
+    {
+        public CollageSlotDropEventArgs(int slotIndex, string[] paths)
+            : base(slotIndex)
+        {
+            Paths = paths ?? Array.Empty<string>();
+        }
+
+        public string[] Paths { get; }
+    }
+
     public sealed class CollageCanvas : FrameworkElement
     {
         private readonly Dictionary<string, double> _ratios = new Dictionary<string, double>();
@@ -75,8 +96,11 @@ namespace PicMark
         private CollageDivider _activeDivider;
         private Point _lastMouse;
         private bool _draggingImage;
+        private int _dropTargetIndex = -1;
 
         public event EventHandler SelectedIndexChanged;
+        public event EventHandler<CollageSlotEventArgs> EmptySlotClicked;
+        public event EventHandler<CollageSlotDropEventArgs> EmptySlotDropped;
 
         public IList<CollageItem> Items
         {
@@ -232,6 +256,8 @@ namespace PicMark
 
                 if (interactive && i == _selectedIndex)
                     dc.DrawRectangle(null, new Pen(new SolidColorBrush(Color.FromRgb(0x2F, 0xA8, 0xFF)), 3), cell);
+                if (interactive && i == _dropTargetIndex)
+                    dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(35, 47, 168, 255)), new Pen(new SolidColorBrush(Color.FromRgb(0x2F, 0xA8, 0xFF)), 3), cell);
             }
 
             if (!interactive) return;
@@ -496,11 +522,23 @@ namespace PicMark
             int index = layout.Cells.FindIndex(cell => cell.Contains(point));
             if (index >= 0 && index < _items.Count)
             {
-                SelectedIndex = index;
-                _lastMouse = point;
-                _draggingImage = true;
-                CaptureMouse();
-                if (e.ClickCount == 2) ResetSelectedImage();
+                if (IsEmptySlot(index))
+                {
+                    EmptySlotClicked?.Invoke(this, new CollageSlotEventArgs(index));
+                }
+                else
+                {
+                    SelectedIndex = index;
+                    _lastMouse = point;
+                    _draggingImage = true;
+                    CaptureMouse();
+                    if (e.ClickCount == 2) ResetSelectedImage();
+                }
+                e.Handled = true;
+            }
+            else if (index >= 0)
+            {
+                EmptySlotClicked?.Invoke(this, new CollageSlotEventArgs(index));
                 e.Handled = true;
             }
         }
@@ -534,7 +572,10 @@ namespace PicMark
 
             var hoverLayout = BuildLayout(RenderSize, _items, RenderSize.Width * (_gap / 1600.0));
             var hoverDivider = hoverLayout.Dividers.FirstOrDefault(divider => divider.HitArea.Contains(point));
-            Cursor = hoverDivider == null ? Cursors.Arrow : (hoverDivider.IsVertical ? Cursors.SizeWE : Cursors.SizeNS);
+            int hoverIndex = hoverLayout.Cells.FindIndex(cell => cell.Contains(point));
+            Cursor = hoverDivider != null
+                ? (hoverDivider.IsVertical ? Cursors.SizeWE : Cursors.SizeNS)
+                : (hoverIndex >= 0 && IsEmptySlot(hoverIndex) ? Cursors.Hand : Cursors.Arrow);
         }
 
         protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -553,6 +594,55 @@ namespace PicMark
             item.Zoom = Clamp(item.Zoom * (e.Delta > 0 ? 1.1 : 1 / 1.1), 1, 5);
             InvalidateVisual();
             e.Handled = true;
+        }
+
+        protected override void OnDragOver(DragEventArgs e)
+        {
+            base.OnDragOver(e);
+            int target = GetEmptySlotAt(e.GetPosition(this));
+            SetDropTarget(target);
+            e.Effects = target >= 0 && e.Data.GetDataPresent(DataFormats.FileDrop)
+                ? DragDropEffects.Copy
+                : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        protected override void OnDragLeave(DragEventArgs e)
+        {
+            base.OnDragLeave(e);
+            SetDropTarget(-1);
+        }
+
+        protected override void OnDrop(DragEventArgs e)
+        {
+            base.OnDrop(e);
+            int target = GetEmptySlotAt(e.GetPosition(this));
+            SetDropTarget(-1);
+            if (target >= 0 && e.Data.GetDataPresent(DataFormats.FileDrop))
+            {
+                var paths = e.Data.GetData(DataFormats.FileDrop) as string[];
+                EmptySlotDropped?.Invoke(this, new CollageSlotDropEventArgs(target, paths));
+                e.Handled = true;
+            }
+        }
+
+        private int GetEmptySlotAt(Point point)
+        {
+            var layout = BuildLayout(RenderSize, _items, RenderSize.Width * (_gap / 1600.0));
+            int index = layout.Cells.FindIndex(cell => cell.Contains(point));
+            return index >= 0 && IsEmptySlot(index) ? index : -1;
+        }
+
+        private bool IsEmptySlot(int index)
+        {
+            return index < 0 || index >= _items.Count || _items[index] == null || _items[index].Image == null;
+        }
+
+        private void SetDropTarget(int index)
+        {
+            if (_dropTargetIndex == index) return;
+            _dropTargetIndex = index;
+            InvalidateVisual();
         }
 
         private static double Clamp(double value, double min, double max)

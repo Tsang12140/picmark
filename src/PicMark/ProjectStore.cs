@@ -189,6 +189,7 @@ namespace PicMark
                 dto.Bounds = ToDto(mosaic.Bounds);
                 dto.BlockSize = mosaic.BlockSize;
                 dto.MosaicMode = mosaic.Mode.ToString();
+                dto.Angle = mosaic.Angle;
             }
             else if (annotation is TextAnnotation text)
             {
@@ -255,6 +256,7 @@ namespace PicMark
                         Bounds = FromDto(dto.Bounds),
                         BlockSize = dto.BlockSize <= 0 ? 18 : dto.BlockSize,
                         Mode = Enum.TryParse(dto.MosaicMode, out MosaicMode mode) ? mode : MosaicMode.Pixelate,
+                        Angle = dto.Angle,
                         StrokeColor = color,
                         Thickness = thickness
                     };
@@ -377,6 +379,7 @@ namespace PicMark
             public string ArrowStyle { get; set; }
             public int BlockSize { get; set; }
             public string MosaicMode { get; set; }
+            public double Angle { get; set; }
             public string Text { get; set; }
             public double FontSize { get; set; }
             public double StartAngle { get; set; }

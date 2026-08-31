@@ -24,6 +24,8 @@ namespace PicMark
         private bool _busy;
         private string _ratioTag = "Auto";
 
+        private int ImageCount => _items.Count(HasImage);
+
         public CollageWindow()
             : this(null)
         {
@@ -60,36 +62,44 @@ namespace PicMark
 
         private async void AddImages_Click(object sender, RoutedEventArgs e)
         {
+            await ChooseImagesAsync(null);
+        }
+
+        private async Task ChooseImagesAsync(int? targetSlot)
+        {
             if (_busy) return;
             var dialog = new OpenFileDialog
             {
-                Multiselect = true,
+                Multiselect = !targetSlot.HasValue,
                 Filter = "图片文件|*.jpg;*.jpeg;*.png;*.bmp;*.webp",
-                Title = "选择拼图图片"
+                Title = targetSlot.HasValue ? $"为第 {targetSlot.Value + 1} 格选择图片" : "选择拼图图片"
             };
             string initialDirectory = GetInitialDirectory();
             if (!string.IsNullOrWhiteSpace(initialDirectory)) dialog.InitialDirectory = initialDirectory;
             if (dialog.ShowDialog(this) == true)
-                await AddPathsAsync(dialog.FileNames);
+                await AddPathsAsync(dialog.FileNames, targetSlot);
         }
 
-        private async Task AddPathsAsync(IEnumerable<string> paths)
+        private async Task AddPathsAsync(IEnumerable<string> paths, int? targetSlot = null)
         {
+            int remainingCapacity = Math.Max(0, MaximumImages - ImageCount);
             var candidates = (paths ?? Enumerable.Empty<string>())
                 .Where(IsSupportedImagePath)
-                .Where(path => !_items.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase)))
+                .Where(path => !_items.Any(item => HasImage(item) && string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase)))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(Math.Max(0, MaximumImages - _items.Count))
+                .Take(remainingCapacity)
                 .ToList();
             if (candidates.Count == 0)
             {
-                if (_items.Count >= MaximumImages)
+                if (ImageCount >= MaximumImages)
                     AppDialog.Show(this, $"为保证低配电脑流畅，一次拼图最多添加 {MaximumImages} 张图片。", "图片数量已满");
                 return;
             }
 
             SetBusy(true, "正在读取图片...");
             var failed = new List<string>();
+            int firstAddedSlot = -1;
+            int nextTargetSlot = targetSlot ?? 0;
             try
             {
                 foreach (string path in candidates)
@@ -97,8 +107,11 @@ namespace PicMark
                     try
                     {
                         BitmapSource image = await Task.Run(() => LoadBitmap(path, 1200));
-                        _items.Add(new CollageItem { Path = path, Image = image });
-                        RefreshItems();
+                        int slot = FindNextEmptySlot(targetSlot.HasValue ? nextTargetSlot : 0);
+                        if (slot >= MaximumImages) break;
+                        SetItemAtSlot(slot, new CollageItem { Path = path, Image = image });
+                        if (firstAddedSlot < 0) firstAddedSlot = slot;
+                        nextTargetSlot = slot + 1;
                     }
                     catch
                     {
@@ -111,12 +124,44 @@ namespace PicMark
                 SetBusy(false, string.Empty);
             }
 
-            if (_items.Count > 0 && ImageListBox.SelectedIndex < 0)
-                ImageListBox.SelectedIndex = 0;
+            RefreshItems();
+            if (firstAddedSlot >= 0)
+                ImageListBox.SelectedIndex = firstAddedSlot;
+            else if (ImageCount > 0 && ImageListBox.SelectedIndex < 0)
+                ImageListBox.SelectedIndex = _items.FindIndex(HasImage);
             UpdatePreviewSize();
             UpdateStatus();
             if (failed.Count > 0)
                 AppDialog.Show(this, "以下图片无法读取：\n" + string.Join("\n", failed.Take(6)), "部分图片未添加");
+        }
+
+        private int FindNextEmptySlot(int startIndex)
+        {
+            int start = Math.Max(0, startIndex);
+            for (int i = start; i < _items.Count; i++)
+                if (!HasImage(_items[i])) return i;
+            return _items.Count;
+        }
+
+        private void SetItemAtSlot(int slot, CollageItem item)
+        {
+            while (_items.Count <= slot && _items.Count < MaximumImages)
+                _items.Add(new CollageItem());
+            if (slot >= 0 && slot < _items.Count)
+                _items[slot] = item;
+        }
+
+        private static bool HasImage(CollageItem item) => item != null && item.Image != null;
+
+        private async void CollagePreview_EmptySlotClicked(object sender, CollageSlotEventArgs e)
+        {
+            await ChooseImagesAsync(e.SlotIndex);
+        }
+
+        private async void CollagePreview_EmptySlotDropped(object sender, CollageSlotDropEventArgs e)
+        {
+            if (_busy) return;
+            await AddPathsAsync(CollectDroppedPaths(e.Paths), e.SlotIndex);
         }
 
         private static BitmapSource LoadBitmap(string path, int decodePixelWidth)
@@ -154,6 +199,8 @@ namespace PicMark
             if (!(sender is Button button) || !(button.Tag is string tag)) return;
             if (!Enum.TryParse(tag, out CollageTemplateKind template)) return;
             CollagePreview.Template = template;
+            if (CollageCanvas.IsFlowTemplate(template) && _items.RemoveAll(item => !HasImage(item)) > 0)
+                RefreshItems();
             string title = button.Content?.ToString() ?? "拼图";
             UpdateTemplateUi(title);
             UpdatePreviewSize();
@@ -233,7 +280,10 @@ namespace PicMark
         {
             int index = ImageListBox.SelectedIndex;
             if (index < 0 || index >= _items.Count) return;
-            _items.RemoveAt(index);
+            if (CollageCanvas.IsFlowTemplate(CollagePreview.Template))
+                _items.RemoveAt(index);
+            else
+                _items[index] = new CollageItem();
             RefreshItems();
             ImageListBox.SelectedIndex = Math.Min(index, _items.Count - 1);
             UpdatePreviewSize();
@@ -303,24 +353,34 @@ namespace PicMark
             if (StatusText == null || ImageCountHintText == null) return;
             int required = CollageCanvas.RequiredImageCount(CollagePreview.Template);
             bool flow = CollageCanvas.IsFlowTemplate(CollagePreview.Template);
-            ImageCountHintText.Text = flow ? $"已添加 {_items.Count} 张" : $"需要 {required} 张 · 已添加 {_items.Count} 张";
+            int imageCount = ImageCount;
+            int usedImageCount = flow ? imageCount : _items.Take(required).Count(HasImage);
+            ImageCountHintText.Text = flow ? $"已添加 {imageCount} 张" : $"需要 {required} 张 · 已添加 {usedImageCount} 张";
             if (_busy) return;
-            if (_items.Count == 0)
-                StatusText.Text = "请添加图片，也可以直接拖入图片文件";
-            else if (_items.Count < required)
-                StatusText.Text = $"还需要 {required - _items.Count} 张图片";
-            else if (!flow && _items.Count > required)
+            if (imageCount == 0)
+                StatusText.Text = "点击任意空格添加图片，也可以直接拖入空格";
+            else if (!HasRequiredImages())
+                StatusText.Text = $"还需要 {Math.Max(0, required - usedImageCount)} 张图片";
+            else if (!flow && imageCount > required)
                 StatusText.Text = $"当前模板使用前 {required} 张，可用上移/下移调整顺序";
             else
                 StatusText.Text = "可以拖动图片、滚轮缩放或调整分隔线";
-            ExportButton.IsEnabled = !_busy && _items.Count >= required;
+            ExportButton.IsEnabled = !_busy && HasRequiredImages();
+        }
+
+        private bool HasRequiredImages()
+        {
+            int required = CollageCanvas.RequiredImageCount(CollagePreview.Template);
+            if (CollageCanvas.IsFlowTemplate(CollagePreview.Template))
+                return ImageCount >= required;
+            return _items.Count >= required && _items.Take(required).All(HasImage);
         }
 
         private async void Export_Click(object sender, RoutedEventArgs e)
         {
             if (_busy) return;
             int required = CollageCanvas.RequiredImageCount(CollagePreview.Template);
-            if (_items.Count < required)
+            if (!HasRequiredImages())
             {
                 AppDialog.Show(this, $"当前模板至少需要 {required} 张图片。", "图片不足");
                 return;
@@ -346,8 +406,7 @@ namespace PicMark
             }
 
             bool flow = CollageCanvas.IsFlowTemplate(CollagePreview.Template);
-            int count = flow ? _items.Count : required;
-            var sourceItems = _items.Take(count).ToList();
+            var sourceItems = flow ? _items.Where(HasImage).ToList() : _items.Take(required).ToList();
             SetBusy(true, $"正在生成 {width} × {height} 拼图...");
             try
             {
@@ -414,7 +473,7 @@ namespace PicMark
 
         private string GetInitialDirectory()
         {
-            string path = _items.FirstOrDefault()?.Path ?? _initialPath;
+            string path = _items.FirstOrDefault(HasImage)?.Path ?? _initialPath;
             if (string.IsNullOrWhiteSpace(path)) return null;
             try { return Path.GetDirectoryName(path); }
             catch { return null; }
@@ -436,8 +495,20 @@ namespace PicMark
         private async void Window_Drop(object sender, DragEventArgs e)
         {
             if (_busy || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+            await AddPathsAsync(CollectDroppedPaths(e.Data));
+        }
+
+        private static List<string> CollectDroppedPaths(object data)
+        {
+            if (!(data is IDataObject dragData) || !dragData.GetDataPresent(DataFormats.FileDrop))
+                return new List<string>();
+            return CollectDroppedPaths(dragData.GetData(DataFormats.FileDrop) as string[]);
+        }
+
+        private static List<string> CollectDroppedPaths(IEnumerable<string> droppedPaths)
+        {
             var paths = new List<string>();
-            foreach (string path in (string[])e.Data.GetData(DataFormats.FileDrop))
+            foreach (string path in droppedPaths ?? Enumerable.Empty<string>())
             {
                 if (Directory.Exists(path))
                 {
@@ -452,7 +523,7 @@ namespace PicMark
                     paths.Add(path);
                 }
             }
-            await AddPathsAsync(paths);
+            return paths;
         }
     }
 }

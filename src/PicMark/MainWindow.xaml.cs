@@ -83,6 +83,7 @@ namespace PicMark
         private bool _viewerRightHot;
         private UpdateCheckResult _lastUpdateCheck;
         private string _telemetryUrl;
+        private bool _syncingAnnotationProperties;
 
         private sealed class EditorSessionState
         {
@@ -124,7 +125,6 @@ namespace PicMark
             Canvas1.PreviewMouseLeftButtonDown += (s, e) =>
             {
                 ArrowPopup.IsOpen = false;
-                MosaicPopup.IsOpen = false;
                 ShapeHintPopup.IsOpen = false;
             };
             PreviewKeyDown += MainWindow_PreviewKeyDown;
@@ -1021,65 +1021,77 @@ namespace PicMark
 
         private void ApplyChromeTheme(bool editMode)
         {
-            // Viewing and editing share one quiet light workspace. Editing is marked by
-            // the active tool, not by turning the whole application into a dark window.
-            SetResourceColor("TextPrimaryBrush", Color.FromRgb(0x1F, 0x2A, 0x37));
-            SetResourceColor("TextSecondaryBrush", Color.FromRgb(0x64, 0x74, 0x8A));
-            SetResourceColor("PanelBrush", Color.FromRgb(0xFF, 0xFF, 0xFF));
-            SetResourceColor("ToolbarBrush", Color.FromRgb(0xFF, 0xFF, 0xFF));
-            SetResourceColor("TitleBarBrush", Color.FromRgb(0xF8, 0xFA, 0xFC));
-            SetResourceColor("BorderBrush1", Color.FromRgb(0xE1, 0xE8, 0xF0));
-            SetResourceColor("HoverBrush", Color.FromRgb(0xF1, 0xF5, 0xF9));
-            SetResourceColor("PressedBrush", Color.FromRgb(0xE8, 0xED, 0xF4));
-            SetResourceColor("TitleBarControlHoverBrush", Color.FromRgb(0xEA, 0xEF, 0xF5));
-            SetResourceColor("TitleBarControlPressedBrush", Color.FromRgb(0xE1, 0xE8, 0xF0));
-            SetResourceColor("TitleUpdateHoverBrush", Color.FromRgb(0xF1, 0xF3, 0xFF));
-            SetResourceColor("TitleUpdatePressedBrush", Color.FromRgb(0xE8, 0xEB, 0xFF));
+            SetResourceColor("TextPrimaryBrush", editMode ? Color.FromRgb(0xF4, 0xF4, 0xF5) : Color.FromRgb(0x1F, 0x2A, 0x37));
+            SetResourceColor("TextSecondaryBrush", editMode ? Color.FromRgb(0xB9, 0xBE, 0xC7) : Color.FromRgb(0x64, 0x74, 0x8A));
+            SetResourceColor("PanelBrush", editMode ? Color.FromRgb(0x34, 0x34, 0x34) : Color.FromRgb(0xFF, 0xFF, 0xFF));
+            SetResourceColor("PanelToolSurfaceBrush", editMode ? Color.FromRgb(0x3A, 0x3A, 0x3A) : Color.FromRgb(0xF8, 0xFA, 0xFC));
+            SetResourceColor("PanelToolBorderBrush", editMode ? Color.FromRgb(0x50, 0x50, 0x50) : Color.FromRgb(0xE1, 0xE8, 0xF0));
+            SetResourceColor("ToolbarBrush", editMode ? Color.FromRgb(0x25, 0x25, 0x25) : Color.FromRgb(0xFF, 0xFF, 0xFF));
+            SetResourceColor("TitleBarBrush", editMode ? Color.FromRgb(0x1C, 0x1C, 0x1C) : Color.FromRgb(0xF8, 0xFA, 0xFC));
+            SetResourceColor("BorderBrush1", editMode ? Color.FromRgb(0x46, 0x46, 0x46) : Color.FromRgb(0xE1, 0xE8, 0xF0));
+            SetResourceColor("HoverBrush", editMode ? Color.FromRgb(0x3F, 0x3F, 0x3F) : Color.FromRgb(0xF1, 0xF5, 0xF9));
+            SetResourceColor("PressedBrush", editMode ? Color.FromRgb(0x4A, 0x4A, 0x4A) : Color.FromRgb(0xE8, 0xED, 0xF4));
+            SetResourceColor("TitleBarControlHoverBrush", editMode ? Color.FromRgb(0x3F, 0x3F, 0x3F) : Color.FromRgb(0xEA, 0xEF, 0xF5));
+            SetResourceColor("TitleBarControlPressedBrush", editMode ? Color.FromRgb(0x4A, 0x4A, 0x4A) : Color.FromRgb(0xE1, 0xE8, 0xF0));
+            SetResourceColor("TitleUpdateHoverBrush", editMode ? Color.FromRgb(0x30, 0x3A, 0x48) : Color.FromRgb(0xF1, 0xF3, 0xFF));
+            SetResourceColor("TitleUpdatePressedBrush", editMode ? Color.FromRgb(0x25, 0x2D, 0x38) : Color.FromRgb(0xE8, 0xEB, 0xFF));
 
-            var workspace = BrushFromRgb(0xF4, 0xF6, 0xF8);
+            var workspace = editMode ? BrushFromRgb(0x24, 0x24, 0x24) : BrushFromRgb(0xF4, 0xF6, 0xF8);
             Background = workspace;
             MainWorkspace.Background = workspace;
             ImageStage.Background = workspace;
             Scroller.Background = workspace;
-            TitleBar.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
-            TopToolbar.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
-            ApplyWindowFrame(false);
-            SetFloatingBadgeTheme(BrushFromArgb(0xF8, 0xFF, 0xFF, 0xFF), BrushFromRgb(0xE1, 0xE8, 0xF0), BrushFromRgb(0x33, 0x41, 0x55));
-            ApplyTitleFileInfoTheme(false);
+            TitleBar.BorderBrush = editMode ? BrushFromRgb(0x38, 0x38, 0x38) : BrushFromRgb(0xE1, 0xE8, 0xF0);
+            TopToolbar.BorderBrush = editMode ? BrushFromRgb(0x3A, 0x3A, 0x3A) : BrushFromRgb(0xE1, 0xE8, 0xF0);
+            ApplyWindowFrame(editMode);
+            SetFloatingBadgeTheme(
+                editMode ? BrushFromArgb(0xF5, 0x30, 0x30, 0x30) : BrushFromArgb(0xF8, 0xFF, 0xFF, 0xFF),
+                editMode ? BrushFromRgb(0x4A, 0x4A, 0x4A) : BrushFromRgb(0xE1, 0xE8, 0xF0),
+                editMode ? BrushFromRgb(0xF4, 0xF4, 0xF5) : BrushFromRgb(0x33, 0x41, 0x55));
+            ApplyTitleFileInfoTheme(editMode);
 
             if (CanvasShadow != null && !CanvasShadow.IsFrozen)
             {
-                CanvasShadow.BlurRadius = 22;
-                CanvasShadow.ShadowDepth = 5;
-                CanvasShadow.Opacity = 0.14;
+                CanvasShadow.BlurRadius = editMode ? 28 : 22;
+                CanvasShadow.ShadowDepth = editMode ? 8 : 5;
+                CanvasShadow.Opacity = editMode ? 0.45 : 0.14;
             }
 
-            ApplyZoomComboTheme(false);
-            ApplyPopupTheme(false);
-            ApplyContextMenuTheme(false);
+            ApplyZoomComboTheme(editMode);
+            ApplyPopupTheme(editMode);
+            ApplyContextMenuTheme(editMode);
             ApplyTopToolbarMode(editMode);
-            ApplyButtonPalette(false);
-            ApplyWindowButtonPalette(false);
-            ApplyEditorPanelTheme();
+            ApplyButtonPalette(editMode);
+            ApplyWindowButtonPalette(editMode);
+            ApplyEditorPanelTheme(editMode);
+            RefreshToolButtonStates();
             UpdateTitleUpdateUi();
         }
 
-        private void ApplyEditorPanelTheme()
+        private void ApplyEditorPanelTheme(bool editMode)
         {
+            Brush panel = editMode ? BrushFromRgb(0x34, 0x34, 0x34) : Brushes.White;
+            Brush border = editMode ? BrushFromRgb(0x46, 0x46, 0x46) : BrushFromRgb(0xE1, 0xE8, 0xF0);
             if (RightEditPanel != null)
             {
-                RightEditPanel.Background = Brushes.White;
-                RightEditPanel.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
+                RightEditPanel.Background = panel;
+                RightEditPanel.BorderBrush = border;
             }
             if (CropPanel != null)
             {
-                CropPanel.Background = Brushes.White;
-                CropPanel.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
+                CropPanel.Background = editMode ? BrushFromRgb(0x32, 0x32, 0x32) : Brushes.White;
+                CropPanel.BorderBrush = editMode ? BrushFromRgb(0x50, 0x50, 0x50) : border;
             }
             if (WatermarkPanel != null)
             {
-                WatermarkPanel.Background = Brushes.White;
-                WatermarkPanel.BorderBrush = BrushFromRgb(0xE1, 0xE8, 0xF0);
+                WatermarkPanel.Background = editMode ? BrushFromRgb(0x32, 0x32, 0x32) : Brushes.White;
+                WatermarkPanel.BorderBrush = editMode ? BrushFromRgb(0x50, 0x50, 0x50) : border;
+            }
+            if (WatermarkTextBox != null)
+            {
+                WatermarkTextBox.Background = editMode ? BrushFromRgb(0x26, 0x26, 0x26) : Brushes.White;
+                WatermarkTextBox.Foreground = editMode ? BrushFromRgb(0xF4, 0xF4, 0xF5) : BrushFromRgb(0x1F, 0x2A, 0x37);
+                WatermarkTextBox.BorderBrush = editMode ? BrushFromRgb(0x50, 0x50, 0x50) : BrushFromRgb(0xDC, 0xE4, 0xEC);
             }
         }
         private void ApplyTitleFileInfoTheme(bool editMode)
@@ -1137,11 +1149,6 @@ namespace PicMark
 
         private void SetFloatingBadgeTheme(Brush background, Brush border, Brush foreground)
         {
-            if (StatusBadge != null)
-            {
-                StatusBadge.Background = background;
-                StatusBadge.BorderBrush = border;
-            }
             if (BottomZoomBar != null)
             {
                 BottomZoomBar.Background = background;
@@ -1157,7 +1164,6 @@ namespace PicMark
                 CurrentFileBadge.Background = background;
                 CurrentFileBadge.BorderBrush = border;
             }
-            if (StatusText != null) StatusText.Foreground = foreground;
             if (ImageInfoText != null) ImageInfoText.Foreground = foreground;
             if (CurrentFileText != null) CurrentFileText.Foreground = foreground;
         }
@@ -1515,7 +1521,6 @@ namespace PicMark
             if (!next)
             {
                 ArrowPopup.IsOpen = false;
-                MosaicPopup.IsOpen = false;
                 ShapeHintPopup.IsOpen = false;
                 WatermarkPanel.Visibility = Visibility.Collapsed;
                 CropPanel.Visibility = Visibility.Collapsed;
@@ -1527,6 +1532,7 @@ namespace PicMark
                 ResetBottomPanButton();
             }
 
+            UpdateAnnotationPropertiesPanel();
             FitImageAfterLayout();
             UpdateViewerNavigation();
             if (showStatus)
@@ -1548,7 +1554,7 @@ namespace PicMark
                 ArrowPopup.IsOpen = false;
                 Scroller.Cursor = Cursors.Hand;
                 SetToolButtonState(new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText }, "Pan", Brushes.Transparent);
-                SetToolButtonState(new[] { PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText }, "Pan", new SolidColorBrush(Color.FromRgb(0x42, 0x42, 0x42)));
+                SetToolButtonState(new[] { PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText }, "Pan", null, true);
                 ResetBottomPanButton();
                 UpdateViewerNavigation();
                 if (Scroller.ScrollableWidth <= 0 && Scroller.ScrollableHeight <= 0)
@@ -1586,9 +1592,7 @@ namespace PicMark
             }
             if (tag == "Mosaic")
             {
-                MosaicPopup.PlacementTarget = button == PanelBtnMosaic ? PanelBtnMosaic : BtnMosaic;
-                MosaicPopup.IsOpen = true;
-                UpdateStatus("马赛克：可切换马赛克/模糊，并调整程度。");
+                UpdateStatus("马赛克：画完立即出现缩放抓手和旋转箭头；拖动时按当前位置实时预览。");
             }
             if (tag == "Text")
                 UpdateStatus("点击图片上的位置，然后直接输入文字；按 Enter 完成。");
@@ -1607,6 +1611,7 @@ namespace PicMark
             SetEditMode(true, false);
             WatermarkPanel.Visibility = Visibility.Visible;
             SetActiveTool("Select");
+            UpdateAnnotationPropertiesPanel();
             if (Canvas1.GetWatermark() == null)
             {
                 ApplyWatermarkPreset(_settings.LastWatermarkPreset);
@@ -1620,8 +1625,11 @@ namespace PicMark
             }
         }
 
-        private void BtnCloseWatermarkPanel_Click(object sender, RoutedEventArgs e) =>
+        private void BtnCloseWatermarkPanel_Click(object sender, RoutedEventArgs e)
+        {
             WatermarkPanel.Visibility = Visibility.Collapsed;
+            UpdateAnnotationPropertiesPanel();
+        }
 
         private static string BuildCertificateWatermarkText() =>
             $"本证件/文件仅用于XX\n挪作他用无效 {DateTime.Now:yyyy年M月d日}";
@@ -2345,15 +2353,15 @@ namespace PicMark
             _isPanningCanvas = false;
             Scroller.Cursor = null;
             if (tag != "Arrow") ArrowPopup.IsOpen = false;
-            if (tag != "Mosaic") MosaicPopup.IsOpen = false;
             if (tag != "Crop" && Canvas1.CurrentTool == AnnotationTool.Crop) Canvas1.CancelCrop();
             Canvas1.CurrentTool = (AnnotationTool)Enum.Parse(typeof(AnnotationTool), tag);
             if (tag == "Crop") Canvas1.BeginCrop();
             CropPanel.Visibility = tag == "Crop" ? Visibility.Visible : Visibility.Collapsed;
             SetToolButtonState(new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText }, tag, Brushes.Transparent);
-            SetToolButtonState(new[] { PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText, PanelBtnCrop }, tag, new SolidColorBrush(Color.FromRgb(0x42, 0x42, 0x42)));
+            SetToolButtonState(new[] { PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText, PanelBtnCrop }, tag, null, true);
             ResetBottomPanButton();
             _settings.Tool = tag;
+            UpdateAnnotationPropertiesPanel();
         }
 
         private void CropAspect_Click(object sender, RoutedEventArgs e)
@@ -2428,6 +2436,7 @@ namespace PicMark
             WatermarkPanel.Visibility = Visibility.Visible;
             WatermarkParametersPanel.Visibility = Visibility.Visible;
             SetActiveTool("Select");
+            UpdateAnnotationPropertiesPanel();
             BatchWatermarkBar.Visibility = Visibility.Visible;
             BatchBar.Visibility = Visibility.Collapsed;
             _hasUnsavedChanges = false;
@@ -3061,6 +3070,7 @@ namespace PicMark
 
         private void ThicknessSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_syncingAnnotationProperties) return;
             double thickness = SetThicknessOption(Math.Round(e.NewValue).ToString());
             if (Canvas1 != null && Canvas1.HasSelection) Canvas1.SetSelectedThickness(thickness);
         }
@@ -3109,15 +3119,161 @@ namespace PicMark
             return fontSize;
         }
 
-        private void SetToolButtonState(IEnumerable<Button> buttons, string tag, Brush normalBackground)
+        private void RefreshToolButtonStates()
+        {
+            if (Canvas1 == null) return;
+            string tag = _panMode ? "Pan" : Canvas1.CurrentTool.ToString();
+            SetToolButtonState(new[] { BtnSelect, BtnRect, BtnEllipse, BtnArrow, BtnFreehand, BtnMosaic, BtnText }, tag, Brushes.Transparent);
+            SetToolButtonState(new[] { PanelBtnRect, PanelBtnEllipse, PanelBtnArrow, PanelBtnFreehand, PanelBtnMosaic, PanelBtnText, PanelBtnCrop }, tag, null, true);
+        }
+
+        private void SetToolButtonState(IEnumerable<Button> buttons, string tag, Brush normalBackground, bool usePanelSurface = false)
         {
             foreach (var btn in buttons)
             {
                 bool active = (string)btn.Tag == tag;
-                btn.Background = active ? (Brush)FindResource("ActiveBrush") : normalBackground;
-                btn.Foreground = active ? Brushes.White : (Brush)FindResource("TextPrimaryBrush");
-                btn.BorderBrush = active ? (Brush)FindResource("ActiveBorderBrush") : (Brush)FindResource("BorderBrush1");
-                btn.BorderThickness = active ? new Thickness(2) : new Thickness(1);
+                if (active)
+                {
+                    btn.Background = (Brush)FindResource("ActiveBrush");
+                    btn.Foreground = Brushes.White;
+                    btn.BorderBrush = (Brush)FindResource("ActiveBorderBrush");
+                    btn.BorderThickness = new Thickness(2);
+                    continue;
+                }
+
+                // 不把“查看模式”的画笔直接塞进按钮属性。使用动态资源后，
+                // 切换到深色编辑器时图标、文字和卡片会一起更新。
+                if (usePanelSurface)
+                {
+                    btn.SetResourceReference(Control.BackgroundProperty, "PanelToolSurfaceBrush");
+                    btn.SetResourceReference(Control.ForegroundProperty, "TextPrimaryBrush");
+                    btn.SetResourceReference(Control.BorderBrushProperty, "PanelToolBorderBrush");
+                    btn.BorderThickness = new Thickness(1);
+                }
+                else
+                {
+                    btn.Background = normalBackground ?? Brushes.Transparent;
+                    btn.SetResourceReference(Control.ForegroundProperty, "TextPrimaryBrush");
+                    btn.SetResourceReference(Control.BorderBrushProperty, "BorderBrush1");
+                    btn.BorderThickness = new Thickness(1);
+                }
+            }
+        }
+
+        private void UpdateAnnotationPropertiesPanel()
+        {
+            if (AnnotationPropertiesHint == null || MosaicPropertiesPanel == null) return;
+
+            AnnotationPropertiesHint.Visibility = Visibility.Collapsed;
+            MosaicPropertiesPanel.Visibility = Visibility.Collapsed;
+            ColorPropertiesLabel.Visibility = Visibility.Collapsed;
+            ColorPropertiesPanel.Visibility = Visibility.Collapsed;
+            ThicknessPropertiesLabel.Visibility = Visibility.Collapsed;
+            ThicknessPropertiesPanel.Visibility = Visibility.Collapsed;
+            TextPropertiesLabel.Visibility = Visibility.Collapsed;
+            TextPropertiesPanel.Visibility = Visibility.Collapsed;
+
+            bool isSpecialPanelOpen =
+                (WatermarkPanel != null && WatermarkPanel.Visibility == Visibility.Visible) ||
+                (CropPanel != null && CropPanel.Visibility == Visibility.Visible);
+            if (!_editMode || isSpecialPanelOpen) return;
+
+            Annotation selected = Canvas1.Selected;
+            bool hasSelection = selected != null;
+            AnnotationTool tool = Canvas1.CurrentTool;
+            bool showMosaic = selected is MosaicAnnotation || (!hasSelection && tool == AnnotationTool.Mosaic);
+            bool showText = selected is TextAnnotation || (!hasSelection && tool == AnnotationTool.Text);
+            bool showColor =
+                (hasSelection && !(selected is MosaicAnnotation)) ||
+                (!hasSelection && (tool == AnnotationTool.Rectangle || tool == AnnotationTool.Ellipse ||
+                                   tool == AnnotationTool.Arrow || tool == AnnotationTool.Freehand ||
+                                   tool == AnnotationTool.Text));
+            bool showThickness =
+                (hasSelection && !(selected is MosaicAnnotation) && !(selected is TextAnnotation)) ||
+                (!hasSelection && (tool == AnnotationTool.Rectangle || tool == AnnotationTool.Ellipse ||
+                                   tool == AnnotationTool.Arrow || tool == AnnotationTool.Freehand));
+
+            if (showMosaic)
+            {
+                MosaicPropertiesPanel.Visibility = Visibility.Visible;
+                var mosaic = selected as MosaicAnnotation;
+                MosaicPanelTitle.Text = mosaic == null ? "新建马赛克" : "编辑马赛克";
+                MosaicPanelHint.Text = mosaic == null
+                    ? "从空白处拖动即可新增；点已有区域可继续调整。"
+                    : "已选中：拖动内部可移动，抓手可缩放或旋转。";
+                SyncMosaicControls(
+                    mosaic?.Mode ?? Canvas1.CurrentMosaicMode,
+                    mosaic?.BlockSize ?? Canvas1.CurrentMosaicStrength);
+            }
+
+            if (showColor)
+            {
+                ColorPropertiesLabel.Visibility = Visibility.Visible;
+                ColorPropertiesPanel.Visibility = Visibility.Visible;
+            }
+            if (showThickness)
+            {
+                ThicknessPropertiesLabel.Visibility = Visibility.Visible;
+                ThicknessPropertiesPanel.Visibility = Visibility.Visible;
+            }
+            if (showText)
+            {
+                TextPropertiesLabel.Visibility = Visibility.Visible;
+                TextPropertiesPanel.Visibility = Visibility.Visible;
+            }
+
+            if (selected is TextAnnotation text)
+            {
+                Canvas1.CurrentFontSize = text.FontSize;
+                SetActiveFontButton(((int)text.FontSize).ToString());
+            }
+            else if (selected != null && !(selected is MosaicAnnotation))
+            {
+                Canvas1.CurrentColor = selected.StrokeColor;
+                if (showThickness)
+                {
+                    _syncingAnnotationProperties = true;
+                    try
+                    {
+                        Canvas1.CurrentThickness = selected.Thickness;
+                        if (ThicknessSlider != null && Math.Abs(ThicknessSlider.Value - selected.Thickness) > 0.001)
+                            ThicknessSlider.Value = selected.Thickness;
+                        if (ThicknessValueText != null)
+                            ThicknessValueText.Text = ((int)Math.Round(selected.Thickness)).ToString();
+                    }
+                    finally
+                    {
+                        _syncingAnnotationProperties = false;
+                    }
+                }
+            }
+
+            if (!showMosaic && !showColor && !showThickness && !showText)
+            {
+                AnnotationPropertiesHint.Text = "点一下已画过的标注，即可继续移动或修改它。";
+                AnnotationPropertiesHint.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void SyncMosaicControls(MosaicMode mode, int strength)
+        {
+            _syncingAnnotationProperties = true;
+            try
+            {
+                Canvas1.CurrentMosaicMode = mode;
+                Canvas1.CurrentMosaicStrength = strength;
+                if (MosaicModePixelBtn != null)
+                    SetChoiceButtonState(MosaicModePixelBtn, mode == MosaicMode.Pixelate);
+                if (MosaicModeBlurBtn != null)
+                    SetChoiceButtonState(MosaicModeBlurBtn, mode == MosaicMode.Blur);
+                if (MosaicStrengthSlider != null && Math.Abs(MosaicStrengthSlider.Value - strength) > 0.001)
+                    MosaicStrengthSlider.Value = strength;
+                if (MosaicStrengthText != null)
+                    MosaicStrengthText.Text = strength.ToString();
+            }
+            finally
+            {
+                _syncingAnnotationProperties = false;
             }
         }
 
@@ -3141,18 +3297,30 @@ namespace PicMark
             SetMosaicMode(tag == "Blur" ? MosaicMode.Blur : MosaicMode.Pixelate);
         }
 
+        private void BtnNewMosaic_Click(object sender, RoutedEventArgs e)
+        {
+            SetEditMode(true, false);
+            SetActiveTool("Mosaic");
+            Canvas1.BeginNewAnnotation();
+            UpdateAnnotationPropertiesPanel();
+            UpdateStatus("新建马赛克：现在可在任意位置拖动，包括已有马赛克上方。");
+        }
+
         private void SetMosaicMode(MosaicMode mode)
         {
             Canvas1.CurrentMosaicMode = mode;
-            if (MosaicModePixelBtn != null)
-                SetChoiceButtonState(MosaicModePixelBtn, mode == MosaicMode.Pixelate);
-            if (MosaicModeBlurBtn != null)
-                SetChoiceButtonState(MosaicModeBlurBtn, mode == MosaicMode.Blur);
-            UpdateStatus(mode == MosaicMode.Blur ? "马赛克工具：模糊模式。" : "马赛克工具：像素马赛克模式。");
+            if (Canvas1.Selected is MosaicAnnotation)
+                Canvas1.SetSelectedMosaicMode(mode);
+            int strength = Canvas1.Selected is MosaicAnnotation selectedMosaic
+                ? selectedMosaic.BlockSize
+                : Canvas1.CurrentMosaicStrength;
+            SyncMosaicControls(mode, strength);
+            UpdateStatus(mode == MosaicMode.Blur ? "马赛克工具：高斯模糊模式。" : "马赛克工具：像素马赛克模式。");
         }
 
         private void MosaicStrengthSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
+            if (_syncingAnnotationProperties) return;
             SetMosaicStrength((int)Math.Round(e.NewValue));
         }
 
@@ -3165,17 +3333,22 @@ namespace PicMark
         private void AdjustMosaicStrength(int delta)
         {
             SetMosaicStrength(Canvas1.CurrentMosaicStrength + delta);
-            UpdateStatus($"马赛克/模糊程度：{Canvas1.CurrentMosaicStrength}");
+            UpdateStatus($"马赛克/高斯模糊程度：{Canvas1.CurrentMosaicStrength}");
         }
 
         private void SetMosaicStrength(int strength)
         {
             strength = Math.Max(2, Math.Min(30, strength));
-            if (Canvas1 != null) Canvas1.CurrentMosaicStrength = strength;
-            if (MosaicStrengthSlider != null && Math.Abs(MosaicStrengthSlider.Value - strength) > 0.001)
-                MosaicStrengthSlider.Value = strength;
-            if (MosaicStrengthText != null)
-                MosaicStrengthText.Text = strength.ToString();
+            if (Canvas1 != null)
+            {
+                Canvas1.CurrentMosaicStrength = strength;
+                if (Canvas1.Selected is MosaicAnnotation)
+                    Canvas1.SetSelectedMosaicStrength(strength);
+            }
+            int actualStrength = Canvas1?.Selected is MosaicAnnotation selectedMosaic
+                ? selectedMosaic.BlockSize
+                : strength;
+            SyncMosaicControls(Canvas1.CurrentMosaicMode, actualStrength);
         }
 
         private void BtnUndo_Click(object sender, RoutedEventArgs e) => Canvas1.Undo();
@@ -3187,7 +3360,12 @@ namespace PicMark
 
         private void Canvas1_SelectionChanged(object sender, EventArgs e)
         {
-            if (Canvas1.Selected is TextAnnotation text)
+            if (Canvas1.Selected is MosaicAnnotation mosaic)
+            {
+                SyncMosaicControls(mosaic.Mode, mosaic.BlockSize);
+                UpdateStatus("已选中马赛克。可拖动、缩放、旋转，或在右侧切换效果。");
+            }
+            else if (Canvas1.Selected is TextAnnotation text)
             {
                 Canvas1.CurrentFontSize = text.FontSize;
                 SetActiveFontButton(((int)text.FontSize).ToString());
@@ -3197,6 +3375,7 @@ namespace PicMark
             {
                 UpdateStatus("已选中标注。可拖动、改色、改粗细或按 Delete 删除。");
             }
+            UpdateAnnotationPropertiesPanel();
         }
 
         private void BtnSave_Click(object sender, RoutedEventArgs e) => SaveAnnotatedImage(false);
@@ -4423,7 +4602,7 @@ namespace PicMark
         {
             OptCheckUpdateText.Text = "正在检查...";
             UpdateTitleUpdateUi(true);
-            UpdateCheckResult result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion());
+            UpdateCheckResult result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion(), _settings);
             HandleUpdateCheckResult(result, showDialog);
         }
 
@@ -4453,7 +4632,7 @@ namespace PicMark
                         && string.IsNullOrWhiteSpace(_telemetryUrl));
                 if (needsManifest)
                 {
-                    result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion());
+                    result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion(), _settings);
                     HandleUpdateCheckResult(result, false);
                     if (_settings.AutoCheckUpdates && result != null && result.Success)
                         OnlineServices.MarkUpdateChecked(_settings);
@@ -4480,7 +4659,7 @@ namespace PicMark
                 OptCheckUpdateText.Text = "检查更新";
                 UpdateTitleUpdateUi();
                 if (showDialog)
-                    AppDialog.Show(this, "暂时无法检查更新。请稍后再试，或直接到 GitHub Releases 查看。", "检查更新");
+                    AppDialog.Show(this, result?.FailureMessage ?? "暂时无法检查更新，请稍后再试。", "检查更新");
                 return;
             }
 
@@ -4549,7 +4728,9 @@ namespace PicMark
             root.Children.Add(MakeDialogTitle($"发现新版本 {result.LatestVersion}"));
             root.Children.Add(new TextBlock
             {
-                Text = "更新不会自动安装。你可以打开下载页自行选择安装版或免安装版。",
+                Text = string.Equals(result.SourceName, "国内镜像", StringComparison.Ordinal)
+                    ? "GitHub 暂时无法访问，本次已从国内镜像读取更新。更新不会自动安装，请选择下载方式。"
+                    : "更新不会自动安装，请选择下载方式。",
                 Foreground = DialogSecondaryTextBrush(),
                 TextWrapping = TextWrapping.Wrap,
                 LineHeight = 22,
@@ -4565,10 +4746,12 @@ namespace PicMark
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 18, 0, 0) };
             var ignoreButton = new Button { Content = "不再提醒此版本", Style = (Style)FindResource("ToolButton"), MinWidth = 118, Margin = new Thickness(0, 0, 8, 0) };
             var laterButton = new Button { Content = "稍后再说", Style = (Style)FindResource("ToolButton"), MinWidth = 84, Margin = new Thickness(0, 0, 8, 0) };
-            var openButton = new Button { Content = "打开下载页", Style = (Style)FindResource("PrimaryButton"), MinWidth = 96 };
+            var portableButton = new Button { Content = "免安装版", Style = (Style)FindResource("ToolButton"), MinWidth = 88, Margin = new Thickness(0, 0, 8, 0), IsEnabled = !string.IsNullOrWhiteSpace(result.PortableUrl) };
+            var setupButton = new Button { Content = "下载安装版", Style = (Style)FindResource("PrimaryButton"), MinWidth = 96, IsEnabled = !string.IsNullOrWhiteSpace(result.SetupUrl) };
             buttons.Children.Add(ignoreButton);
             buttons.Children.Add(laterButton);
-            buttons.Children.Add(openButton);
+            buttons.Children.Add(portableButton);
+            buttons.Children.Add(setupButton);
             root.Children.Add(buttons);
 
             ignoreButton.Click += (s, e) =>
@@ -4580,9 +4763,14 @@ namespace PicMark
                 dialog.Close();
             };
             laterButton.Click += (s, e) => dialog.Close();
-            openButton.Click += (s, e) =>
+            portableButton.Click += (s, e) =>
             {
-                OpenExternalUrl(result.ReleaseUrl);
+                OpenExternalUrl(result.PortableUrl);
+                dialog.Close();
+            };
+            setupButton.Click += (s, e) =>
+            {
+                OpenExternalUrl(result.SetupUrl);
                 dialog.Close();
             };
 
@@ -4638,7 +4826,7 @@ namespace PicMark
 
             checkButton.Click += async (s, e) =>
             {
-                UpdateCheckResult result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion());
+                UpdateCheckResult result = await OnlineServices.CheckForUpdateAsync(GetDisplayVersion(), _settings);
                 HandleUpdateCheckResult(result, true);
             };
             privacyButton.Click += (s, e) => OpenExternalUrl("https://github.com/Tsang12140/picmark/blob/main/docs/PRIVACY.md");
@@ -4987,7 +5175,7 @@ namespace PicMark
             AddShortcutSection(content, "绘制辅助",
                 Tuple.Create("Shift + 拖动", "圈选工具画正圆"),
                 Tuple.Create("滚轮", "画笔、矩形、圆形、箭头工具下调整粗细"),
-                Tuple.Create("滚轮", "马赛克工具下调整马赛克 / 模糊强度"));
+                Tuple.Create("滚轮", "马赛克工具下调整马赛克 / 高斯模糊强度"));
 
             var scroll = new ScrollViewer
             {
@@ -5297,37 +5485,35 @@ namespace PicMark
             if (overlayWidth <= 0 || zoomWidth <= 0) return;
 
             const double centerOuterMargin = 24;
-            const double rightInset = 12;
             double sideWidth = Math.Max(0, (overlayWidth - zoomWidth - centerOuterMargin) / 2.0);
-            double rightAvailable = Math.Max(0, sideWidth - rightInset);
+            double rightAvailable = Math.Max(0, sideWidth - 12);
 
             if (RightBottomBadges != null)
                 RightBottomBadges.MaxWidth = rightAvailable;
 
-            if (StatusBadge != null)
-            {
-                StatusBadge.MaxWidth = sideWidth;
-                StatusText.MaxWidth = Math.Max(0, sideWidth - 22);
-            }
-
-            if (Canvas1.Image == null || rightAvailable < 150)
+            if (Canvas1.Image == null)
             {
                 CurrentFileBadge.Visibility = Visibility.Collapsed;
                 ImageInfoBadge.Visibility = Visibility.Collapsed;
                 return;
             }
 
-            bool showFileBadge = rightAvailable >= 365;
-            double infoBadgeWidth = showFileBadge
-                ? Math.Min(210, Math.Max(140, rightAvailable * 0.50))
-                : Math.Min(260, rightAvailable);
-            double fileBadgeWidth = showFileBadge
-                ? Math.Max(100, Math.Min(230, rightAvailable - infoBadgeWidth - 6))
-                : 0;
-
+            double infoBadgeWidth = Math.Min(360, Math.Max(110, sideWidth));
             ImageInfoBadge.Visibility = Visibility.Visible;
             ImageInfoBadge.MaxWidth = infoBadgeWidth;
-            ImageInfoText.MaxWidth = Math.Max(80, infoBadgeWidth - 18);
+            ImageInfoText.MaxWidth = Math.Max(88, infoBadgeWidth - 22);
+
+            if (rightAvailable < 150)
+            {
+                CurrentFileBadge.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            bool showFileBadge = rightAvailable >= 365;
+            double fileBadgeWidth = showFileBadge
+                ? Math.Max(100, Math.Min(230, rightAvailable))
+                : 0;
+
             CurrentFileBadge.Visibility = showFileBadge ? Visibility.Visible : Visibility.Collapsed;
             if (showFileBadge)
             {
@@ -5703,7 +5889,9 @@ namespace PicMark
             return Math.Max(a, 1);
         }
 
-        private void UpdateStatus(string text) => StatusText.Text = text;
+        // 底部状态提示已移除，避免与图片信息争抢空间。
+        // 仍保留调用入口，便于以后在需要时改接短暂提示，而不干扰当前浏览界面。
+        private void UpdateStatus(string text) { }
 
         private static string ShortenFileName(string name)
         {

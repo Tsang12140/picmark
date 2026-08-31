@@ -27,6 +27,15 @@ PicMark is being built for the user's father, whose core need is local image ann
 - If PicMark blocks rebuilding, copying, or replacing the executable, close/kill PicMark directly without asking first.
 - Do not assume the currently opened PicMark image/project contains important unsaved work during development.
 
+## Release And Domestic Update Mirror
+
+- PicMark's Bitiful S4 release integration is configured in `.github/workflows/release.yml`, not in a local `.env` file.
+- The workflow reads these GitHub Actions repository secrets: `S4_BUCKET`, `S4_AK`, and `S4_SK`. Never add their values to source code, documentation, console output, or commits.
+- S4 API endpoint: `https://s3.bitiful.net`; public download root: `https://picmark-release.s3.bitiful.net/picmark`.
+- A release tag uploads artifacts to `picmark/releases/v{version}/`, verifies every upload with `s3api head-object`, then publishes `picmark/update.json` last. The mirror update manifest contains direct setup and portable download URLs.
+- Client update behavior: request GitHub's update manifest first; only if that request fails, request the Bitiful mirror. The mirror fallback is limited locally to three attempts per device per calendar day. Keep this order and limit unless the user explicitly changes the update policy.
+- For release details and recovery steps, read `docs/RELEASE.md`; do not infer bucket names or credentials from public download URLs.
+
 ## UI Rules
 
 - Popup menus must be compact, left-aligned, and sized to their content.

@@ -514,42 +514,108 @@ namespace PicMark
         public Rect Bounds { get; set; }
         public int BlockSize { get; set; } = 18;
         public MosaicMode Mode { get; set; } = MosaicMode.Pixelate;
+        // 旋转角度（度）。Bounds 始终保存未旋转时的本地尺寸，便于继续编辑。
+        public double Angle { get; set; }
 
         // 缓存马赛克位图，仅当参数变化时重建
         private BitmapSource _cachedBitmap;
-        private Rect _cachedBounds;
+        private Rect _cachedEffectBounds;
         private int _cachedBlockSize;
         private MosaicMode _cachedMode;
         private WeakReference<BitmapSource> _cachedSourceRef;
+        private bool _isTransforming;
+        // 拖动时只计算当前区域的缩小预览；像素马赛克和高斯模糊分别设限，
+        // 避免大图上的每次鼠标移动都触发百万级像素运算。
+        private const int InteractivePixelatePreviewPixels = 180000;
+        private const int InteractiveGaussianPreviewPixels = 90000;
+        private static readonly Dictionary<int, double[]> GaussianWeights = new Dictionary<int, double[]>();
 
-        public override Rect GetBounds() => Bounds;
+        public override Rect GetBounds()
+        {
+            if (Bounds.IsEmpty || Math.Abs(Angle) < 0.001) return Bounds;
+
+            double radians = Angle * Math.PI / 180.0;
+            double cos = Math.Abs(Math.Cos(radians));
+            double sin = Math.Abs(Math.Sin(radians));
+            double width = Bounds.Width * cos + Bounds.Height * sin;
+            double height = Bounds.Width * sin + Bounds.Height * cos;
+            var center = GetCenter();
+            return new Rect(center.X - width / 2, center.Y - height / 2, width, height);
+        }
+
+        public Point GetCenter() => new Point(Bounds.Left + Bounds.Width / 2, Bounds.Top + Bounds.Height / 2);
+
+        public bool Contains(Point point)
+        {
+            Point local = RotatePoint(point, GetCenter(), -Angle);
+            return Bounds.Contains(local);
+        }
+
+        public Point[] GetCorners()
+        {
+            var center = GetCenter();
+            return new[]
+            {
+                RotatePoint(new Point(Bounds.Left, Bounds.Top), center, Angle),
+                RotatePoint(new Point(Bounds.Right, Bounds.Top), center, Angle),
+                RotatePoint(new Point(Bounds.Right, Bounds.Bottom), center, Angle),
+                RotatePoint(new Point(Bounds.Left, Bounds.Bottom), center, Angle)
+            };
+        }
+
+        public void SetInteractiveTransforming(bool value)
+        {
+            if (_isTransforming == value) return;
+            _isTransforming = value;
+            // 松开鼠标后清掉缩略预览，立即按原图分辨率精确重算。
+            if (!value) ClearEffectCache();
+        }
 
         public override void Draw(DrawingContext dc, bool selected, BitmapSource sourceImage)
         {
             if (sourceImage != null)
             {
-                var bitmap = GetOrBuildEffectBitmap(sourceImage);
-                if (bitmap != null) dc.DrawImage(bitmap, Bounds);
+                Rect effectBounds = GetEffectBounds(sourceImage);
+                var bitmap = GetOrBuildEffectBitmap(sourceImage, effectBounds);
+                if (bitmap != null)
+                {
+                    var clip = new RectangleGeometry(Bounds)
+                    {
+                        Transform = new RotateTransform(Angle, GetCenter().X, GetCenter().Y)
+                    };
+                    dc.PushClip(clip);
+                    dc.DrawImage(bitmap, effectBounds);
+                    dc.Pop();
+                }
             }
-            if (selected) DrawSelectionAdorner(dc, Bounds);
+            if (selected) DrawSelectionAdorner(dc, GetBounds());
         }
 
-        private BitmapSource GetOrBuildEffectBitmap(BitmapSource sourceImage)
+        private Rect GetEffectBounds(BitmapSource sourceImage)
         {
-            // 检查缓存是否仍然有效
-            if (_cachedBitmap != null &&
-                _cachedSourceRef != null &&
+            Rect visualBounds = GetBounds();
+            int left = Math.Max(0, (int)Math.Floor(visualBounds.Left));
+            int top = Math.Max(0, (int)Math.Floor(visualBounds.Top));
+            int right = Math.Min(sourceImage.PixelWidth, (int)Math.Ceiling(visualBounds.Right));
+            int bottom = Math.Min(sourceImage.PixelHeight, (int)Math.Ceiling(visualBounds.Bottom));
+            return new Rect(left, top, Math.Max(0, right - left), Math.Max(0, bottom - top));
+        }
+
+        private BitmapSource GetOrBuildEffectBitmap(BitmapSource sourceImage, Rect effectBounds)
+        {
+            bool isCachedSource = _cachedSourceRef != null &&
                 _cachedSourceRef.TryGetTarget(out var cachedSource) &&
-                ReferenceEquals(cachedSource, sourceImage) &&
-                _cachedBounds == Bounds &&
+                ReferenceEquals(cachedSource, sourceImage);
+            if (_cachedBitmap != null && isCachedSource &&
+                _cachedEffectBounds == effectBounds &&
                 _cachedBlockSize == BlockSize &&
                 _cachedMode == Mode)
             {
                 return _cachedBitmap;
             }
 
-            _cachedBitmap = BuildEffectBitmap(sourceImage);
-            _cachedBounds = Bounds;
+            _cachedBitmap = BuildEffectBitmap(sourceImage, effectBounds, _isTransforming);
+            _cachedEffectBounds = effectBounds;
             _cachedBlockSize = BlockSize;
             _cachedMode = Mode;
             if (_cachedSourceRef == null)
@@ -559,25 +625,46 @@ namespace PicMark
             return _cachedBitmap;
         }
 
-        private BitmapSource BuildEffectBitmap(BitmapSource sourceImage)
+        private void ClearEffectCache()
         {
-            int x = Math.Max(0, (int)Math.Round(Bounds.X));
-            int y = Math.Max(0, (int)Math.Round(Bounds.Y));
-            int w = Math.Min((int)Math.Round(Bounds.Width), sourceImage.PixelWidth - x);
-            int h = Math.Min((int)Math.Round(Bounds.Height), sourceImage.PixelHeight - y);
+            _cachedBitmap = null;
+            _cachedEffectBounds = Rect.Empty;
+            _cachedSourceRef = null;
+        }
+
+        private BitmapSource BuildEffectBitmap(BitmapSource sourceImage, Rect effectBounds, bool interactive)
+        {
+            int x = (int)effectBounds.X;
+            int y = (int)effectBounds.Y;
+            int w = (int)effectBounds.Width;
+            int h = (int)effectBounds.Height;
             if (w <= 0 || h <= 0) return null;
 
-            var converted = new FormatConvertedBitmap(sourceImage, PixelFormats.Bgra32, null, 0);
-            int stride = w * 4;
-            var pixels = new byte[h * stride];
-            converted.CopyPixels(new Int32Rect(x, y, w, h), pixels, stride, 0);
+            double sampleScale = 1.0;
+            long sourcePixels = (long)w * h;
+            int previewLimit = Mode == MosaicMode.Blur
+                ? InteractiveGaussianPreviewPixels
+                : InteractivePixelatePreviewPixels;
+            if (interactive && sourcePixels > previewLimit)
+                sampleScale = Math.Sqrt(previewLimit / (double)sourcePixels);
+
+            BitmapSource sampled = new CroppedBitmap(sourceImage, new Int32Rect(x, y, w, h));
+            if (sampleScale < 0.999)
+                sampled = new TransformedBitmap(sampled, new ScaleTransform(sampleScale, sampleScale));
+
+            var converted = new FormatConvertedBitmap(sampled, PixelFormats.Bgra32, null, 0);
+            int sampleWidth = converted.PixelWidth;
+            int sampleHeight = converted.PixelHeight;
+            int stride = sampleWidth * 4;
+            var pixels = new byte[sampleHeight * stride];
+            converted.CopyPixels(pixels, stride, 0);
 
             if (Mode == MosaicMode.Blur)
-                ApplyBlur(pixels, w, h, stride, Math.Max(1, BlockSize / 2));
+                ApplyGaussianBlur(pixels, sampleWidth, sampleHeight, stride, Math.Max(1, (int)Math.Round(BlockSize * sampleScale / 2.0)));
             else
-                ApplyPixelate(pixels, w, h, stride, Math.Max(2, BlockSize));
+                ApplyPixelate(pixels, sampleWidth, sampleHeight, stride, Math.Max(2, (int)Math.Round(BlockSize * sampleScale)));
 
-            var bmp = BitmapSource.Create(w, h, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
+            var bmp = BitmapSource.Create(sampleWidth, sampleHeight, 96, 96, PixelFormats.Bgra32, null, pixels, stride);
             bmp.Freeze();
             return bmp;
         }
@@ -616,77 +703,93 @@ namespace PicMark
             }
         }
 
-        private static void ApplyBlur(byte[] pixels, int w, int h, int stride, int radius)
+        private static void ApplyGaussianBlur(byte[] pixels, int w, int h, int stride, int radius)
         {
-            radius = Math.Max(1, Math.Min(radius, 18));
-            for (int pass = 0; pass < 3; pass++)
-            {
-                BoxBlurHorizontal(pixels, w, h, stride, radius);
-                BoxBlurVertical(pixels, w, h, stride, radius);
-            }
-        }
+            radius = Math.Max(1, Math.Min(radius, 15));
+            double[] weights = GetGaussianWeights(radius);
+            var horizontal = new byte[pixels.Length];
 
-        private static void BoxBlurHorizontal(byte[] pixels, int w, int h, int stride, int radius)
-        {
-            var copy = (byte[])pixels.Clone();
             for (int y = 0; y < h; y++)
             {
+                int row = y * stride;
                 for (int x = 0; x < w; x++)
                 {
-                    int count = 0;
-                    int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
+                    double blue = 0, green = 0, red = 0, total = 0;
                     int from = Math.Max(0, x - radius);
                     int to = Math.Min(w - 1, x + radius);
-                    for (int sx = from; sx <= to; sx++)
+                    for (int sampleX = from; sampleX <= to; sampleX++)
                     {
-                        int source = y * stride + sx * 4;
-                        sumB += copy[source];
-                        sumG += copy[source + 1];
-                        sumR += copy[source + 2];
-                        sumA += copy[source + 3];
-                        count++;
+                        double weight = weights[sampleX - x + radius];
+                        int source = row + sampleX * 4;
+                        blue += pixels[source] * weight;
+                        green += pixels[source + 1] * weight;
+                        red += pixels[source + 2] * weight;
+                        total += weight;
                     }
-                    int target = y * stride + x * 4;
-                    pixels[target] = (byte)(sumB / count);
-                    pixels[target + 1] = (byte)(sumG / count);
-                    pixels[target + 2] = (byte)(sumR / count);
-                    pixels[target + 3] = (byte)(sumA / count);
+                    int target = row + x * 4;
+                    horizontal[target] = (byte)(blue / total);
+                    horizontal[target + 1] = (byte)(green / total);
+                    horizontal[target + 2] = (byte)(red / total);
+                    horizontal[target + 3] = pixels[target + 3];
                 }
             }
-        }
 
-        private static void BoxBlurVertical(byte[] pixels, int w, int h, int stride, int radius)
-        {
-            var copy = (byte[])pixels.Clone();
             for (int y = 0; y < h; y++)
             {
                 for (int x = 0; x < w; x++)
                 {
-                    int count = 0;
-                    int sumB = 0, sumG = 0, sumR = 0, sumA = 0;
+                    double blue = 0, green = 0, red = 0, total = 0;
                     int from = Math.Max(0, y - radius);
                     int to = Math.Min(h - 1, y + radius);
-                    for (int sy = from; sy <= to; sy++)
+                    for (int sampleY = from; sampleY <= to; sampleY++)
                     {
-                        int source = sy * stride + x * 4;
-                        sumB += copy[source];
-                        sumG += copy[source + 1];
-                        sumR += copy[source + 2];
-                        sumA += copy[source + 3];
-                        count++;
+                        double weight = weights[sampleY - y + radius];
+                        int source = sampleY * stride + x * 4;
+                        blue += horizontal[source] * weight;
+                        green += horizontal[source + 1] * weight;
+                        red += horizontal[source + 2] * weight;
+                        total += weight;
                     }
                     int target = y * stride + x * 4;
-                    pixels[target] = (byte)(sumB / count);
-                    pixels[target + 1] = (byte)(sumG / count);
-                    pixels[target + 2] = (byte)(sumR / count);
-                    pixels[target + 3] = (byte)(sumA / count);
+                    pixels[target] = (byte)(blue / total);
+                    pixels[target + 1] = (byte)(green / total);
+                    pixels[target + 2] = (byte)(red / total);
+                    pixels[target + 3] = horizontal[target + 3];
                 }
             }
+        }
+
+        private static double[] GetGaussianWeights(int radius)
+        {
+            if (GaussianWeights.TryGetValue(radius, out var cached)) return cached;
+
+            double sigma = Math.Max(1.0, radius * 0.55);
+            var weights = new double[radius * 2 + 1];
+            double sum = 0;
+            for (int i = -radius; i <= radius; i++)
+            {
+                double weight = Math.Exp(-(i * i) / (2 * sigma * sigma));
+                weights[i + radius] = weight;
+                sum += weight;
+            }
+            for (int i = 0; i < weights.Length; i++) weights[i] /= sum;
+            GaussianWeights[radius] = weights;
+            return weights;
         }
 
         public override void Move(Vector delta) => Bounds = new Rect(Bounds.TopLeft + delta, Bounds.Size);
 
-        public override Annotation Clone() => new MosaicAnnotation { Bounds = Bounds, BlockSize = BlockSize, Mode = Mode, StrokeColor = StrokeColor, Thickness = Thickness };
+        public override Annotation Clone() => new MosaicAnnotation { Bounds = Bounds, BlockSize = BlockSize, Mode = Mode, Angle = Angle, StrokeColor = StrokeColor, Thickness = Thickness };
+
+        private static Point RotatePoint(Point point, Point center, double angle)
+        {
+            double radians = angle * Math.PI / 180.0;
+            double cos = Math.Cos(radians);
+            double sin = Math.Sin(radians);
+            double dx = point.X - center.X;
+            double dy = point.Y - center.Y;
+            return new Point(center.X + dx * cos - dy * sin, center.Y + dx * sin + dy * cos);
+        }
     }
 
     public class TextAnnotation : Annotation

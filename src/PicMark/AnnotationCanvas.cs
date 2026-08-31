@@ -49,6 +49,21 @@ namespace PicMark
         private Point _cropDragStartImagePoint;
         private Rect _cropDragStartRect;
         private const double CropHandleScreenSize = 9;
+        private enum MosaicHandle { None, Move, N, S, E, W, NE, NW, SE, SW, Rotate }
+        private MosaicHandle _mosaicDragHandle = MosaicHandle.None;
+        private Point _mosaicDragStartImagePoint;
+        private Rect _mosaicDragStartBounds;
+        private double _mosaicDragStartAngle;
+        private bool _mosaicTransformChanged;
+        // 下一次落笔强制新建。用于在已有马赛克上再补一块时避免误选旧对象。
+        private bool _forceNewAnnotation;
+        private const double MosaicHandleScreenSize = 10;
+        // 旋转抓手独立于缩放点：做成更容易点中的圆形按钮，而不是一个小字形。
+        private const double MosaicRotateButtonScreenSize = 28;
+        private const double MosaicRotateHandleDistance = 34;
+        private static readonly SolidColorBrush MosaicControlAccentBrush = CreateFrozenBrush(0xAE, 0xB7, 0xFF);
+        private static readonly SolidColorBrush MosaicRotateButtonBrush = CreateFrozenBrush(0x52, 0x65, 0xFF);
+        private static readonly Geometry MosaicRotateIconGeometry = CreateMosaicRotateIconGeometry();
 
         // Win7 兼容：缓存渲染画笔，避免高频 OnRender 中每帧分配
         private SolidColorBrush _cacheBackgroundBrush;
@@ -160,6 +175,7 @@ namespace PicMark
             _selectionMoved = false;
             _isMovingSingleWatermark = false;
             _cropDragHandle = CropHandle.None;
+            EndMosaicTransform(false);
             _cropRect = null;
             Cursor = null;
             if (IsMouseCaptured)
@@ -217,8 +233,10 @@ namespace PicMark
                     else if (ReferenceEquals(a, _editingText))
                         continue;
                     else
-                        a.Draw(dc, _isEditingEnabled && a == _selected, Image);
+                        a.Draw(dc, _isEditingEnabled && a == _selected && !(a is MosaicAnnotation), Image);
                 }
+                if (_isEditingEnabled && _selected is MosaicAnnotation selectedMosaic)
+                    DrawMosaicSelectionControls(dc, selectedMosaic);
                 if (_isEditingEnabled)
                     _drawing?.Draw(dc, false, Image);
                 _watermark?.Draw(dc, Image);
@@ -272,6 +290,275 @@ namespace PicMark
             yield return new Point(r.Left + r.Width / 2, r.Bottom);
             yield return new Point(r.Left, r.Top + r.Height / 2);
             yield return new Point(r.Right, r.Top + r.Height / 2);
+        }
+
+        private void DrawMosaicSelectionControls(DrawingContext dc, MosaicAnnotation mosaic)
+        {
+            Point[] corners = mosaic.GetCorners();
+            if (corners.Length != 4) return;
+
+            double inv = _scale > 0 ? 1.0 / _scale : 1.0;
+            var borderPen = new Pen(MosaicControlAccentBrush, 1.5 * inv) { DashStyle = DashStyles.Dash };
+            borderPen.Freeze();
+            var outline = new StreamGeometry();
+            using (var context = outline.Open())
+            {
+                context.BeginFigure(corners[0], false, true);
+                context.LineTo(corners[1], true, false);
+                context.LineTo(corners[2], true, false);
+                context.LineTo(corners[3], true, false);
+            }
+            outline.Freeze();
+            dc.DrawGeometry(null, borderPen, outline);
+
+            var handlePen = new Pen(MosaicControlAccentBrush, 1.25 * inv);
+            handlePen.Freeze();
+            double size = MosaicHandleScreenSize * inv;
+            foreach (var point in GetMosaicResizeHandlePoints(corners))
+                dc.DrawRectangle(Brushes.White, handlePen, new Rect(point.X - size / 2, point.Y - size / 2, size, size));
+
+            Point rotationAnchor = GetMosaicRotationAnchor(corners);
+            Point rotateHandle = GetMosaicRotationHandle(mosaic, corners);
+            dc.DrawLine(handlePen, rotationAnchor, rotateHandle);
+            double rotateRadius = MosaicRotateButtonScreenSize * inv / 2;
+            var rotateBorderPen = new Pen(Brushes.White, 1.8 * inv);
+            rotateBorderPen.Freeze();
+            dc.DrawEllipse(MosaicRotateButtonBrush, rotateBorderPen, rotateHandle, rotateRadius, rotateRadius);
+
+            double iconScale = rotateRadius * 1.55 / 1024.0;
+            dc.PushTransform(new TranslateTransform(
+                rotateHandle.X - 512 * iconScale,
+                rotateHandle.Y - 512 * iconScale));
+            dc.PushTransform(new ScaleTransform(iconScale, iconScale));
+            dc.DrawGeometry(Brushes.White, null, MosaicRotateIconGeometry);
+            dc.Pop();
+            dc.Pop();
+        }
+
+        // 使用用户提供的 SVG 原始路径；运行时仍是 WPF Geometry，不需要加入 SVG 解析库。
+        private static Geometry CreateMosaicRotateIconGeometry()
+        {
+            Geometry geometry = Geometry.Parse(
+                "M541.226667,66.517333 L393.045333,217.685333 " +
+                "a21.333333,21.333333 0 0 0 0,29.866667 " +
+                "l147.84,150.826667 a21.333333,21.333333 0 0 0 28.16,2.090666 " +
+                "l2.346667,-2.090666 27.050667,-27.605334 " +
+                "a21.333333,21.333333 0 0 0 0,-29.866666 " +
+                "l-69.888,-71.338667 a304.64,304.64 0 1 1 -318.421334,352.682667 " +
+                "l-1.024,-6.826667 a176.554667,176.554667 0 0 1 -0.64,-5.632 " +
+                "a21.333333,21.333333 0 0 0 -22.314666,-19.114667 " +
+                "l-42.666667,2.261334 a21.333333,21.333333 0 0 0 -20.224,22.4 " +
+                "l0.085333,1.024 1.194667,10.496 " +
+                "A389.973333,389.973333 0 1 0 539.178667,184.746667 " +
+                "l59.306666,-60.458667 a21.333333,21.333333 0 0 0 0,-29.866667 " +
+                "l-27.093333,-27.605333 a21.333333,21.333333 0 0 0 -30.165333,-0.298667 z");
+            geometry.Freeze();
+            return geometry;
+        }
+
+        private static SolidColorBrush CreateFrozenBrush(byte red, byte green, byte blue)
+        {
+            var brush = new SolidColorBrush(Color.FromRgb(red, green, blue));
+            brush.Freeze();
+            return brush;
+        }
+
+        private static Point[] GetMosaicResizeHandlePoints(Point[] corners)
+        {
+            return new[]
+            {
+                corners[0],
+                Midpoint(corners[0], corners[1]),
+                corners[1],
+                Midpoint(corners[1], corners[2]),
+                corners[2],
+                Midpoint(corners[2], corners[3]),
+                corners[3],
+                Midpoint(corners[3], corners[0])
+            };
+        }
+
+        private Point GetMosaicRotationHandle(MosaicAnnotation mosaic, Point[] corners)
+        {
+            Point topMiddle = GetMosaicRotationAnchor(corners);
+            Point center = mosaic.GetCenter();
+            Vector direction = topMiddle - center;
+            if (direction.Length < 0.001) direction = new Vector(0, -1);
+            else direction.Normalize();
+            return topMiddle + direction * (MosaicRotateHandleDistance / Math.Max(0.05, Scale));
+        }
+
+        // 始终绑定马赛克的同一条局部上边。旋转过程中不能按屏幕坐标换边，否则会跳到别的节点。
+        private static Point GetMosaicRotationAnchor(Point[] corners)
+        {
+            return Midpoint(corners[0], corners[1]);
+        }
+
+        private MosaicHandle HitTestMosaicHandle(MosaicAnnotation mosaic, Point point)
+        {
+            Point[] corners = mosaic.GetCorners();
+            if (corners.Length != 4) return MosaicHandle.None;
+
+            Point rotateHandle = GetMosaicRotationHandle(mosaic, corners);
+            double scale = Math.Max(0.05, Scale);
+            double rotateTolerance = MosaicRotateButtonScreenSize * 0.62 / scale;
+            if ((point - rotateHandle).Length <= rotateTolerance) return MosaicHandle.Rotate;
+
+            double tolerance = Math.Max(8, MosaicHandleScreenSize) / scale;
+
+            Point[] handles = GetMosaicResizeHandlePoints(corners);
+            MosaicHandle[] kinds =
+            {
+                MosaicHandle.NW, MosaicHandle.N, MosaicHandle.NE, MosaicHandle.E,
+                MosaicHandle.SE, MosaicHandle.S, MosaicHandle.SW, MosaicHandle.W
+            };
+            for (int i = 0; i < handles.Length; i++)
+                if ((point - handles[i]).Length <= tolerance) return kinds[i];
+
+            return mosaic.Contains(point) ? MosaicHandle.Move : MosaicHandle.None;
+        }
+
+        private void BeginMosaicTransform(MosaicAnnotation mosaic, MosaicHandle handle, Point point)
+        {
+            _mosaicDragHandle = handle;
+            _mosaicDragStartImagePoint = point;
+            _mosaicDragStartBounds = mosaic.Bounds;
+            _mosaicDragStartAngle = mosaic.Angle;
+            _mosaicTransformChanged = false;
+            mosaic.SetInteractiveTransforming(true);
+            if (!CaptureMouse())
+            {
+                mosaic.SetInteractiveTransforming(false);
+                _mosaicDragHandle = MosaicHandle.None;
+            }
+        }
+
+        private void UpdateMosaicTransform(MosaicAnnotation mosaic, Point point)
+        {
+            if (_mosaicDragHandle == MosaicHandle.None) return;
+            if (!_mosaicTransformChanged)
+            {
+                PushUndo();
+                _mosaicTransformChanged = true;
+            }
+
+            if (_mosaicDragHandle == MosaicHandle.Move)
+            {
+                mosaic.Move(point - _mosaicDragStartImagePoint);
+                _mosaicDragStartImagePoint = point;
+                InvalidateVisual();
+                return;
+            }
+
+            Point startCenter = new Point(
+                _mosaicDragStartBounds.Left + _mosaicDragStartBounds.Width / 2,
+                _mosaicDragStartBounds.Top + _mosaicDragStartBounds.Height / 2);
+            if (_mosaicDragHandle == MosaicHandle.Rotate)
+            {
+                Vector direction = point - startCenter;
+                if (direction.Length >= 2)
+                {
+                    double angle = Math.Atan2(direction.Y, direction.X) * 180.0 / Math.PI + 90.0;
+                    if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                        angle = Math.Round(angle / 15.0) * 15.0;
+                    mosaic.Angle = NormalizeAngle(angle);
+                }
+                InvalidateVisual();
+                return;
+            }
+
+            Point localPoint = RotatePoint(point, startCenter, -_mosaicDragStartAngle);
+            double left = _mosaicDragStartBounds.Left;
+            double top = _mosaicDragStartBounds.Top;
+            double right = _mosaicDragStartBounds.Right;
+            double bottom = _mosaicDragStartBounds.Bottom;
+            const double minSize = 8;
+            switch (_mosaicDragHandle)
+            {
+                case MosaicHandle.NW:
+                    left = Math.Min(localPoint.X, right - minSize);
+                    top = Math.Min(localPoint.Y, bottom - minSize);
+                    break;
+                case MosaicHandle.N:
+                    top = Math.Min(localPoint.Y, bottom - minSize);
+                    break;
+                case MosaicHandle.NE:
+                    right = Math.Max(localPoint.X, left + minSize);
+                    top = Math.Min(localPoint.Y, bottom - minSize);
+                    break;
+                case MosaicHandle.E:
+                    right = Math.Max(localPoint.X, left + minSize);
+                    break;
+                case MosaicHandle.SE:
+                    right = Math.Max(localPoint.X, left + minSize);
+                    bottom = Math.Max(localPoint.Y, top + minSize);
+                    break;
+                case MosaicHandle.S:
+                    bottom = Math.Max(localPoint.Y, top + minSize);
+                    break;
+                case MosaicHandle.SW:
+                    left = Math.Min(localPoint.X, right - minSize);
+                    bottom = Math.Max(localPoint.Y, top + minSize);
+                    break;
+                case MosaicHandle.W:
+                    left = Math.Min(localPoint.X, right - minSize);
+                    break;
+            }
+
+            double width = right - left;
+            double height = bottom - top;
+            Point localCenter = new Point(left + width / 2, top + height / 2);
+            Point center = RotatePoint(localCenter, startCenter, _mosaicDragStartAngle);
+            mosaic.Bounds = new Rect(center.X - width / 2, center.Y - height / 2, width, height);
+            mosaic.Angle = _mosaicDragStartAngle;
+            InvalidateVisual();
+        }
+
+        private void EndMosaicTransform(bool notifyChanged)
+        {
+            if (_mosaicDragHandle == MosaicHandle.None) return;
+            if (_selected is MosaicAnnotation mosaic)
+                mosaic.SetInteractiveTransforming(false);
+            bool changed = _mosaicTransformChanged;
+            _mosaicDragHandle = MosaicHandle.None;
+            _mosaicTransformChanged = false;
+            if (changed && notifyChanged)
+                AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private static Point Midpoint(Point a, Point b) => new Point((a.X + b.X) / 2, (a.Y + b.Y) / 2);
+
+        private static Point RotatePoint(Point point, Point center, double angle)
+        {
+            double radians = angle * Math.PI / 180.0;
+            double cos = Math.Cos(radians);
+            double sin = Math.Sin(radians);
+            double dx = point.X - center.X;
+            double dy = point.Y - center.Y;
+            return new Point(center.X + dx * cos - dy * sin, center.Y + dx * sin + dy * cos);
+        }
+
+        private static Cursor CursorForMosaicHandle(MosaicHandle handle)
+        {
+            switch (handle)
+            {
+                case MosaicHandle.Rotate:
+                case MosaicHandle.Move:
+                    return Cursors.Hand;
+                case MosaicHandle.N:
+                case MosaicHandle.S:
+                    return Cursors.SizeNS;
+                case MosaicHandle.E:
+                case MosaicHandle.W:
+                    return Cursors.SizeWE;
+                case MosaicHandle.NE:
+                case MosaicHandle.NW:
+                case MosaicHandle.SE:
+                case MosaicHandle.SW:
+                    return Cursors.SizeAll;
+                default:
+                    return null;
+            }
         }
 
         private Point ToImagePoint(Point screenPoint)
@@ -341,6 +628,56 @@ namespace PicMark
             base.OnPreviewMouseLeftButtonUp(e);
         }
 
+        private bool TryBeginExistingAnnotationInteraction(Point point, int clickCount)
+        {
+            if (_forceNewAnnotation)
+            {
+                _forceNewAnnotation = false;
+                return false;
+            }
+
+            // 已选马赛克的变形抓手优先于标注本体；其余位置仍按最上层对象命中，
+            // 这样重叠标注也能点回到后画的对象。
+            if (_selected is MosaicAnnotation selectedMosaic)
+            {
+                MosaicHandle selectedHandle = HitTestMosaicHandle(selectedMosaic, point);
+                if (selectedHandle != MosaicHandle.None && selectedHandle != MosaicHandle.Move)
+                {
+                    BeginMosaicTransform(selectedMosaic, selectedHandle, point);
+                    return true;
+                }
+            }
+
+            Annotation hit = HitTest(point);
+            if (hit == null) return false;
+
+            if (clickCount == 2 && hit is TextAnnotation textHit)
+            {
+                SetSelected(textHit);
+                BeginEditTextAnnotation(textHit);
+                return true;
+            }
+
+            // 第一次点旧标注只负责选中，防止用户本想选中却把对象拖走。
+            if (!ReferenceEquals(_selected, hit))
+            {
+                SetSelected(hit);
+                return true;
+            }
+
+            if (hit is MosaicAnnotation mosaic)
+            {
+                BeginMosaicTransform(mosaic, MosaicHandle.Move, point);
+                return true;
+            }
+
+            _isMovingSelection = true;
+            _selectionMoved = false;
+            _dragStartImagePoint = point;
+            if (!CaptureMouse()) _isMovingSelection = false;
+            return true;
+        }
+
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
             if (Image == null) return;
@@ -349,6 +686,12 @@ namespace PicMark
             var p = ToImagePoint(e.GetPosition(this));
 
             if (TryBeginWatermarkDrag(e.GetPosition(this)))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (CurrentTool != AnnotationTool.Crop && TryBeginExistingAnnotationInteraction(p, e.ClickCount))
             {
                 e.Handled = true;
                 return;
@@ -403,21 +746,7 @@ namespace PicMark
                     break;
                 case AnnotationTool.Select:
                 default:
-                    var hit = HitTest(p);
-                    if (e.ClickCount == 2 && hit is TextAnnotation textHit)
-                    {
-                        BeginEditTextAnnotation(textHit);
-                        e.Handled = true;
-                        break;
-                    }
-                    SetSelected(hit);
-                    if (hit != null)
-                    {
-                        _isMovingSelection = true;
-                        _selectionMoved = false;
-                        _dragStartImagePoint = p;
-                        if (!CaptureMouse()) { _isMovingSelection = false; }
-                    }
+                    SetSelected(null);
                     break;
             }
         }
@@ -461,6 +790,10 @@ namespace PicMark
                 AddFreehandPoint(fh, p);
                 InvalidateVisual();
             }
+            else if (_mosaicDragHandle != MosaicHandle.None && _selected is MosaicAnnotation selectedMosaic)
+            {
+                UpdateMosaicTransform(selectedMosaic, p);
+            }
             else if (_isMovingSelection && _selected != null)
             {
                 if (!_selectionMoved)
@@ -481,6 +814,14 @@ namespace PicMark
             else if (CurrentTool == AnnotationTool.Crop && _cropRect.HasValue)
             {
                 Cursor = CursorForCropHandle(HitTestCropHandle(p, _cropRect.Value));
+            }
+            else if ((CurrentTool == AnnotationTool.Select || CurrentTool == AnnotationTool.Mosaic) && _selected is MosaicAnnotation mosaic)
+            {
+                Cursor = CursorForMosaicHandle(HitTestMosaicHandle(mosaic, p));
+            }
+            else if (CurrentTool == AnnotationTool.Select || CurrentTool == AnnotationTool.Mosaic)
+            {
+                Cursor = null;
             }
         }
 
@@ -630,10 +971,12 @@ namespace PicMark
                     _drawing = TryCreateBeautifiedShape(upFreehand) ?? _drawing;
                 _beautifyTimer.Stop();
                 ReleaseMouseCapture();
-                if (IsDrawingValid(_drawing))
+                Annotation completed = _drawing;
+                if (IsDrawingValid(completed))
                 {
                     PushUndo();
-                    Annotations.Add(_drawing);
+                    Annotations.Add(completed);
+                    SetSelected(completed);
                     AnnotationsChanged?.Invoke(this, EventArgs.Empty);
                 }
                 _drawing = null;
@@ -647,6 +990,12 @@ namespace PicMark
                 _selectionMoved = false;
                 ReleaseMouseCapture();
                 if (moved) AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+            }
+            else if (_mosaicDragHandle != MosaicHandle.None)
+            {
+                EndMosaicTransform(true);
+                ReleaseMouseCapture();
+                InvalidateVisual();
             }
             else if (_cropDragHandle != CropHandle.None)
             {
@@ -1379,6 +1728,17 @@ namespace PicMark
             InvalidateVisual();
         }
 
+        /// <summary>
+        /// 让下一次鼠标落点忽略已有标注并新建当前工具对象。
+        /// </summary>
+        public void BeginNewAnnotation()
+        {
+            if (!IsEditingEnabled) return;
+            _forceNewAnnotation = true;
+            SetSelected(null);
+            InvalidateVisual();
+        }
+
         public void SetSelectedColor(Color color)
         {
             if (!IsEditingEnabled) return;
@@ -1395,6 +1755,28 @@ namespace PicMark
             if (_selected == null || _selected is TextAnnotation || _selected is MosaicAnnotation) return;
             PushUndo();
             _selected.Thickness = thickness;
+            InvalidateVisual();
+            AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void SetSelectedMosaicMode(MosaicMode mode)
+        {
+            if (!IsEditingEnabled) return;
+            if (!(_selected is MosaicAnnotation mosaic) || mosaic.Mode == mode) return;
+            PushUndo();
+            mosaic.Mode = mode;
+            InvalidateVisual();
+            AnnotationsChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void SetSelectedMosaicStrength(int strength)
+        {
+            if (!IsEditingEnabled) return;
+            if (!(_selected is MosaicAnnotation mosaic)) return;
+            strength = Math.Max(2, Math.Min(30, strength));
+            if (mosaic.BlockSize == strength) return;
+            PushUndo();
+            mosaic.BlockSize = strength;
             InvalidateVisual();
             AnnotationsChanged?.Invoke(this, EventArgs.Empty);
         }
@@ -1434,9 +1816,15 @@ namespace PicMark
         {
             for (int i = Annotations.Count - 1; i >= 0; i--)
             {
-                var b = Annotations[i].GetBounds();
+                var annotation = Annotations[i];
+                if (annotation is MosaicAnnotation mosaic)
+                {
+                    if (mosaic.Contains(imagePoint)) return mosaic;
+                    continue;
+                }
+                var b = annotation.GetBounds();
                 b.Inflate(8, 8);
-                if (b.Contains(imagePoint)) return Annotations[i];
+                if (b.Contains(imagePoint)) return annotation;
             }
             return null;
         }
@@ -1757,6 +2145,7 @@ namespace PicMark
             Image = cropped;
             _cropRect = null;
             _cropDragHandle = CropHandle.None;
+            EndMosaicTransform(false);
             Cursor = null;
             SetSelected(null);
             InvalidateVisual();
@@ -1781,7 +2170,7 @@ namespace PicMark
 
             PushUndo();
             Image = RenderTransformedImage(Image, operation);
-            var transformed = Annotations.Select(annotation => TransformAnnotation(annotation, transformPoint)).ToList();
+            var transformed = Annotations.Select(annotation => TransformAnnotation(annotation, transformPoint, operation)).ToList();
             Annotations.Clear();
             Annotations.AddRange(transformed);
             TransformWatermark(operation, transformPoint, oldWidth, oldHeight, newWidth, newHeight);
@@ -1790,6 +2179,7 @@ namespace PicMark
             _editingText = null;
             _cropRect = null;
             _cropDragHandle = CropHandle.None;
+            EndMosaicTransform(false);
             Cursor = null;
             SetSelected(null);
             InvalidateVisual();
@@ -1888,7 +2278,7 @@ namespace PicMark
             return bitmap;
         }
 
-        private static Annotation TransformAnnotation(Annotation annotation, Func<Point, Point> transform)
+        private static Annotation TransformAnnotation(Annotation annotation, Func<Point, Point> transform, ImageTransformOperation operation)
         {
             if (annotation is RectAnnotation rect)
                 return new RectAnnotation { Bounds = TransformRect(rect.Bounds, transform), StrokeColor = rect.StrokeColor, Thickness = rect.Thickness };
@@ -1935,12 +2325,42 @@ namespace PicMark
             }
 
             if (annotation is MosaicAnnotation mosaic)
-                return new MosaicAnnotation { Bounds = TransformRect(mosaic.Bounds, transform), BlockSize = mosaic.BlockSize, Mode = mosaic.Mode, StrokeColor = mosaic.StrokeColor, Thickness = mosaic.Thickness };
+            {
+                Point center = transform(mosaic.GetCenter());
+                return new MosaicAnnotation
+                {
+                    Bounds = new Rect(center.X - mosaic.Bounds.Width / 2, center.Y - mosaic.Bounds.Height / 2, mosaic.Bounds.Width, mosaic.Bounds.Height),
+                    BlockSize = mosaic.BlockSize,
+                    Mode = mosaic.Mode,
+                    Angle = TransformMosaicAngle(mosaic.Angle, operation),
+                    StrokeColor = mosaic.StrokeColor,
+                    Thickness = mosaic.Thickness
+                };
+            }
 
             if (annotation is TextAnnotation text)
                 return new TextAnnotation { Location = transform(text.Location), Text = text.Text, FontSize = text.FontSize, StrokeColor = text.StrokeColor, Thickness = text.Thickness };
 
             return annotation.Clone();
+        }
+
+        private static double TransformMosaicAngle(double angle, ImageTransformOperation operation)
+        {
+            switch (operation)
+            {
+                case ImageTransformOperation.RotateLeft90:
+                    return NormalizeAngle(angle - 90);
+                case ImageTransformOperation.RotateRight90:
+                    return NormalizeAngle(angle + 90);
+                case ImageTransformOperation.Rotate180:
+                    return NormalizeAngle(angle + 180);
+                case ImageTransformOperation.FlipHorizontal:
+                    return NormalizeAngle(180 - angle);
+                case ImageTransformOperation.FlipVertical:
+                    return NormalizeAngle(-angle);
+                default:
+                    return NormalizeAngle(angle);
+            }
         }
 
         private static Rect TransformRect(Rect rect, Func<Point, Point> transform)
@@ -2000,6 +2420,7 @@ namespace PicMark
         public void ClearAll()
         {
             _beautifyTimer.Stop();
+            EndMosaicTransform(false);
             Annotations.Clear();
             _watermark = null;
             _isMovingSingleWatermark = false;
@@ -2021,6 +2442,7 @@ namespace PicMark
         public void LoadState(IEnumerable<Annotation> annotations, WatermarkSettings watermark)
         {
             _beautifyTimer.Stop();
+            EndMosaicTransform(false);
             Annotations.Clear();
             if (annotations != null)
                 Annotations.AddRange(annotations);
@@ -2073,6 +2495,7 @@ namespace PicMark
 
         private void ReplaceState(UndoManager.CanvasState state)
         {
+            EndMosaicTransform(false);
             Image = state.Image;
             Annotations.Clear();
             Annotations.AddRange(state.Annotations);

@@ -84,6 +84,8 @@ namespace PicMark
         public string InstallId { get; set; } = Guid.NewGuid().ToString("N");
         public string LastUpdateCheckUtc { get; set; } = string.Empty;
         public string IgnoredUpdateVersion { get; set; } = string.Empty;
+        public string DomesticUpdateFallbackDate { get; set; } = string.Empty;
+        public int DomesticUpdateFallbackCount { get; set; }
         public string LastTelemetryDateUtc { get; set; } = string.Empty;
         public string LastTelemetryUrl { get; set; } = string.Empty;
         public List<string> RecentFiles { get; } = new List<string>();
@@ -192,6 +194,8 @@ namespace PicMark
                 "InstallId=" + InstallId,
                 "LastUpdateCheckUtc=" + LastUpdateCheckUtc,
                 "IgnoredUpdateVersion=" + IgnoredUpdateVersion,
+                "DomesticUpdateFallbackDate=" + DomesticUpdateFallbackDate,
+                "DomesticUpdateFallbackCount=" + DomesticUpdateFallbackCount,
                 "LastTelemetryDateUtc=" + LastTelemetryDateUtc,
                 "LastTelemetryUrl=" + LastTelemetryUrl,
                 "RecentFiles=" + string.Join("|", RecentFiles.Select(Uri.EscapeDataString)),
@@ -239,6 +243,8 @@ namespace PicMark
                 case "InstallId": InstallId = string.IsNullOrWhiteSpace(value) ? InstallId : value; break;
                 case "LastUpdateCheckUtc": LastUpdateCheckUtc = value ?? string.Empty; break;
                 case "IgnoredUpdateVersion": IgnoredUpdateVersion = value ?? string.Empty; break;
+                case "DomesticUpdateFallbackDate": DomesticUpdateFallbackDate = value ?? string.Empty; break;
+                case "DomesticUpdateFallbackCount": DomesticUpdateFallbackCount = Math.Max(0, ParseInt(value, DomesticUpdateFallbackCount)); break;
                 case "LastTelemetryDateUtc": LastTelemetryDateUtc = value ?? string.Empty; break;
                 case "LastTelemetryUrl": LastTelemetryUrl = value ?? string.Empty; break;
                 case "RecentFiles":

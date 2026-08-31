@@ -25,6 +25,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: ${{ secrets.S4_SK }}
       AWS_DEFAULT_REGION: cn-east-1
       S4_ENDPOINT: https://s3.bitiful.net
+      S4_PUBLIC_BASE_URL: https://picmark-release.s3.bitiful.net/picmark
       GH_TOKEN: ${{ github.token }}
 
     steps:
@@ -128,6 +129,7 @@ jobs:
         shell: pwsh
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: |
           $ErrorActionPreference = 'Stop'
           if ([string]::IsNullOrWhiteSpace($env:S4_BUCKET) -or
@@ -152,7 +154,17 @@ jobs:
           }
 
           # Upload this last: future clients only see a manifest after every asset exists.
-          aws --endpoint-url $env:S4_ENDPOINT s3 cp 'docs/update.json' "s3://$env:S4_BUCKET/picmark/update.json" --content-type 'application/json' --no-progress --only-show-errors
+          # The domestic manifest points directly to the verified files in this public download domain.
+          $mirrorManifest = Get-Content 'docs/update.json' -Raw | ConvertFrom-Json
+          $publicBase = $env:S4_PUBLIC_BASE_URL.TrimEnd('/')
+          $releaseBase = "$publicBase/releases/$env:RELEASE_TAG"
+          $mirrorManifest.releaseUrl = $releaseBase
+          $mirrorManifest.setupUrl = "$releaseBase/PicMark-Setup-$env:RELEASE_VERSION.exe"
+          $mirrorManifest.portableUrl = "$releaseBase/PicMark-portable-$env:RELEASE_VERSION.zip"
+          $mirrorManifestPath = Join-Path $env:RUNNER_TEMP 'picmark-domestic-update.json'
+          $mirrorManifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $mirrorManifestPath -Encoding utf8
+
+          aws --endpoint-url $env:S4_ENDPOINT s3 cp $mirrorManifestPath "s3://$env:S4_BUCKET/picmark/update.json" --content-type 'application/json' --no-progress --only-show-errors
           if ($LASTEXITCODE -ne 0) { throw 'S4 update manifest upload failed.' }
 
           $updateHead = aws --endpoint-url $env:S4_ENDPOINT s3api head-object --bucket $env:S4_BUCKET --key 'picmark/update.json' --output json | ConvertFrom-Json

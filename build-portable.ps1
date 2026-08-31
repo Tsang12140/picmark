@@ -1,5 +1,6 @@
 param(
-    [switch]$Preview
+    [switch]$Preview,
+    [switch]$KeepRunning
 )
 
 $ErrorActionPreference = "Stop"
@@ -11,8 +12,13 @@ $PortableDir = Join-Path $ProjectRoot "dist\PicMark-portable"
 
 Write-Host "=== PicMark build ===" -ForegroundColor Cyan
 
-Write-Host "[1/4] Closing running PicMark process..." -ForegroundColor Yellow
-Stop-Process -Name PicMark -Force -ErrorAction SilentlyContinue
+if ($KeepRunning) {
+    Write-Host "[1/4] Keeping any running PicMark process..." -ForegroundColor Yellow
+}
+else {
+    Write-Host "[1/4] Closing running PicMark process..." -ForegroundColor Yellow
+    Stop-Process -Name PicMark -Force -ErrorAction SilentlyContinue
+}
 
 Write-Host "[2/4] Building Release..." -ForegroundColor Yellow
 $ProgramFiles = [Environment]::GetFolderPath("ProgramFiles")
